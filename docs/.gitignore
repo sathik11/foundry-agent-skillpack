@@ -1,0 +1,8 @@
+# Astro build artifacts
+dist/
+.astro/
+node_modules/
+
+# Mirrored from foundry-agent-fixtures by scripts/mirror-recipes.mjs
+# (single source of truth lives in the fixtures package)
+src/content/docs/recipes/

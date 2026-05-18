@@ -1,0 +1,51 @@
+name: APM install smoke test
+
+on:
+  pull_request:
+    paths:
+      - 'foundry-agent-skillpack/**'
+      - 'foundry-agent-fixtures/**'
+      - '.github/workflows/apm-install-test.yml'
+  push:
+    branches: [main]
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install APM
+        run: curl -sSL https://aka.ms/apm-unix | sh
+
+      - name: Install skillpack package from local checkout
+        run: |
+          mkdir -p /tmp/consumer && cd /tmp/consumer
+          cat > apm.yml <<'EOF'
+          name: install-smoke-test
+          version: 0.0.1
+          targets: [copilot, agent-skills]
+          EOF
+          # Fix heredoc indentation — YAML is whitespace-sensitive
+          sed -i 's/^          //' apm.yml
+          cat apm.yml
+          echo "--- Installing skillpack ---"
+          apm install "$GITHUB_WORKSPACE/foundry-agent-skillpack"
+          echo "--- Installing fixtures ---"
+          apm install "$GITHUB_WORKSPACE/foundry-agent-fixtures"
+
+      - name: Verify installed artifacts
+        run: |
+          cd /tmp/consumer
+          echo "=== Skills ==="
+          ls .agents/skills/ | tee /dev/stderr | wc -l
+          echo "=== Prompts ==="
+          ls .github/prompts/ | tee /dev/stderr | wc -l
+          echo "=== Key files ==="
+          test -f .agents/skills/foundry-deploy/SKILL.md
+          test -f .agents/skills/foundry-deploy/runtime-dependencies.md
+          test -f .agents/skills/foundry-agent-fixtures/SKILL.md
+          echo "All checks passed"
+
+      - name: APM audit (non-blocking)
+        run: cd /tmp/consumer && apm audit || true

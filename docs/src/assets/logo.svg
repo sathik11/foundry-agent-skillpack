@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6c47ff"/>
+      <stop offset="1" stop-color="#00dccc"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylised "skillpack" — three concentric arcs suggesting a control loop. -->
+  <circle cx="32" cy="32" r="26" stroke="url(#g)" stroke-width="3" stroke-linecap="round" stroke-dasharray="120 40"/>
+  <circle cx="32" cy="32" r="18" stroke="url(#g)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="80 30" opacity="0.7"/>
+  <circle cx="32" cy="32" r="10" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-dasharray="40 20" opacity="0.5"/>
+  <circle cx="32" cy="32" r="2.5" fill="url(#g)"/>
+</svg>

@@ -1,0 +1,10 @@
+# Capacity headroom — model deployment TPM utilization, last 1h.
+// Pair with az cognitiveservices account deployment show --query 'sku.capacity'.
+AzureMetrics
+| where TimeGenerated > ago(1h)
+| where ResourceProvider == "MICROSOFT.COGNITIVESERVICES"
+| where MetricName in ("TokenTransaction", "ProcessedPromptTokens", "GeneratedTokens")
+| summarize
+    tokens_per_min = sum(Total) / 60.0
+    by bin(TimeGenerated, 5m), Resource, MetricName
+| order by TimeGenerated desc, Resource asc

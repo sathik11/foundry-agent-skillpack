@@ -1,0 +1,82 @@
+---
+title: Roadmap
+description: What's done, what's next, and what's deferred — with the reasoning for each.
+---
+
+The skillpack is at **v0.20.0** (May 2026). What's next is sequenced by *value of unblocking* + *real cost of building*. Open follow-ons are tracked in [TECHNICAL_DEBT.md](/technical-debt/) on disk.
+
+## Shipped recently
+
+### v0.20.0 — TD-2 + TD-10 close-out
+
+- ✅ **TD-2 — `/publish-teams` orchestration prompt** shipped. Detects new vs legacy agent object model, preflights `Microsoft.BotService` + secret scan + BYO-VNet/public-Bot mismatch, patches `agent.yaml` (`BotServiceRbac` + Activity protocol), prints the `azd ai agent publish` CLI (does not execute), captures the project→application identity flip, dispatches `/configure-rbac post_publish=true` for RBAC re-fan, and emits the M365 admin approval runbook.
+- ✅ **`/configure-rbac post_publish=true`** mode added — skips Phase 1/2, re-fans Phase 3 grants against the published application identity, writes to `rbac.capability_grants_post_publish`.
+- ✅ **`agent-status.json` schema v1.1** — additive `publish` section.
+- ✅ **TD-10 — `deep_network` opt-in** on `/prepare-deploy`. Three-layer close-out: deep-walk scripts (NSG, Azure Firewall, SEP) behind `--deep` on `check-source-network.sh`; paste-ready Bicep snippet for BYO VNet + PE + Private DNS; new `network-troubleshooter.md` symptom→fix runbook.
+
+### v0.19.0
+
+- ✅ Package renamed from `foundry-agent-harness` → `foundry-agent-skillpack` (`aliases: [foundry-agent-harness]` ships through v0.20.0 — retirement deferred to v0.21.0 per TD-19).
+- ✅ Astro Starlight documentation site (this site).
+- ✅ Azure Static Web Apps deployment workflow.
+- ✅ Docs drift checker (`docs/scripts/check-drift.mjs`).
+
+### v0.18.0
+
+- ✅ Rename `foundry-agent-engineering` → `foundry-agent-harness` (superseded in v0.19.0).
+- ✅ ROADMAP at repo root + on this site.
+
+## Next minor (v0.21)
+
+| Item | Source | Status |
+| --- | --- | --- |
+| **TD-19 — retire `foundry-agent-harness` alias** | TECHNICAL_DEBT | Planned (breaking — coordinate with release notes) |
+| **TD-14 — External persistence for Invocations agents** (Cosmos / Redis / Storage Tables patterns; new `persistence` block in `agent-capabilities.yaml`) | TECHNICAL_DEBT | Planned |
+| **Daily docs-scan workflow** (catches Foundry preview drift; underpins TD-4 / TD-8 / TD-9 close-outs by surfacing API rename + region list changes) | TECHNICAL_DEBT | Planned |
+| **`/setup-evals` writes to `agent-status.json` `evals` block** | gap noted in agent-status-schema | Quick follow-on |
+
+## 1.0 candidate
+
+These should land before declaring 1.0:
+
+| Item | Source | Trigger |
+| --- | --- | --- |
+| **TD-7 — `--wait-for-rbac` flag** (`/verify-agent` polls a known endpoint until success or 20 min timeout) | TECHNICAL_DEBT | When users hit propagation 403s repeatedly |
+| **TD-13 — `--ast` flag for `scan_knowledge_refs.py`** (catches aliased imports, conditional imports, framework-specific tool wrappers) | TECHNICAL_DEBT | When first user reports false negative |
+| **TD-6 — Consumer-smoke matrix CI job** (validates a fresh consumer project resolves both packages) | TECHNICAL_DEBT | Before public 1.0 |
+| **First-class APIM `kind` in `verify-source-rbac.sh`** | Recipe 05 callout | Cleans up Recipe 05 |
+
+## Post-1.0
+
+| Item | Source | Notes |
+| --- | --- | --- |
+| **TD-15 — Microsoft Learn submission** | Roadmap doc | Months-long content + IP review; aim once adoption justifies |
+| **`register-custom-agent` flow** (true outside-Foundry agents — separate `foundry-control-plane` skill) | Brainstorm | Distinct from Invocations protocol; agents running in your own AKS / EKS / on-prem |
+| **TD-4 promotion — Foundry-DLP `block` mode out of preview-warning** | TECHNICAL_DEBT | When Purview classification API + token surface confirmed GA |
+| **TD-1 Fabric workspace API automation** (replace print-only with API call when Fabric-aud token can be obtained cleanly) | TECHNICAL_DEBT | When Fabric workspace add is exposed via Graph or similar |
+| **Legacy-agent upgrade-gesture branch retirement in `/publish-teams`** | TD-2 verification track | When MS Learn legacy → new-model upgrade gesture GAs |
+
+## Backlog
+
+Ideas tracked but not committed:
+
+- Multi-language brownfield scanner (TypeScript / C# in addition to Python).
+- VS Code Foundry extension surface that renders the audit-drift report inline.
+- Per-skill testing sub-docs (today recipes are the only end-to-end test path).
+- Foundry-skills sample sub-doc (today the SKILL.md is the only doc — could grow).
+
+## Explicit non-goals
+
+Things we have deliberately decided not to do:
+
+- **Auto-fix in `/audit-drift`**. Drift detection and remediation are different code paths. `/audit-drift` reads; `/configure-rbac` + `/verify-agent` write. Auto-fix risks silently re-granting roles that were deliberately revoked.
+- **Data-plane smoke retrieves in `/audit-drift`**. That's `/verify-agent`'s job — audit shouldn't trigger live agent invocations on a weekly schedule.
+- **Hosting our own MCP server**. Boundary stays at "knowledge package + scripts." If we ever ship one, separate repo.
+- **`agent-graph.json` as a separate artifact**. Subsumed by `agent-status.json` (one artifact, multiple readers).
+- **Executing `azd ai agent publish` from `/publish-teams`**. Mutating publish stays operator-visible (matches the `azd up` boundary). The prompt prints the CLI; the human runs it.
+- **Executing role assignments from `refan-rbac-post-publish.sh`**. Script emits the exact `/configure-rbac post_publish=true` invocation; grants stay in the audited prompt path.
+
+## Read next
+
+- [Technical debt](/technical-debt/) — the on-disk TD-N tracking that this roadmap is derived from.
+- [Contributing](/contributing/) — how to propose roadmap items.

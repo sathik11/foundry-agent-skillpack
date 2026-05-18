@@ -1,0 +1,249 @@
+/* Foundry Agent Skillpack — Starlight customization
+ *
+ * Goals:
+ *  - Dark, glossy aesthetic (Harness-inspired) without losing Starlight's accessibility defaults.
+ *  - Inter typography (closest free alternative to Harness's Söhne).
+ *  - Subtle gradient hero, animated status badges, brand-tinted accent color.
+ *  - Code blocks already polished by Expressive Code (configured in astro.config.mjs).
+ */
+
+/* Inter — primary font; Geist would be closer to Harness but Inter ships everywhere. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Brand-tinted accent — picks up Foundry purple-cyan vibe without stealing the Microsoft palette. */
+  --sl-color-accent-low: #1f1147;
+  --sl-color-accent: #6c47ff;
+  --sl-color-accent-high: #c0b3ff;
+
+  /* Override Starlight's default font stack with Inter. */
+  --sl-font:
+    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --sl-font-system: var(--sl-font);
+  --sl-font-system-mono:
+    ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-bg: #0a0b14;
+  --sl-color-bg-nav: #0e0f1a;
+  --sl-color-bg-sidebar: #0c0d18;
+  --sl-color-text: #e6e7ee;
+}
+
+/* Tighten Inter's default tracking to match the Harness display look. */
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* ───── Splash hero (landing page) ───── */
+
+.hero {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(108, 71, 255, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 80% 30%, rgba(0, 220, 220, 0.10) 0%, transparent 50%);
+  border-radius: 1.5rem;
+  padding-block: clamp(2rem, 5vw, 4rem);
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.75rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  background: linear-gradient(180deg, #ffffff 0%, #b8b6c7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Light mode: dark gradient title so it's readable on white. */
+:root:not([data-theme='dark']) .hero h1 {
+  background: linear-gradient(180deg, #1a0e3a 0%, #4c3299 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero .tagline {
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  max-width: 36rem;
+  color: var(--sl-color-text);
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+/* Action buttons */
+.hero .actions a[data-variant='primary'] {
+  background: linear-gradient(135deg, #6c47ff 0%, #00dccc 140%);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 24px -8px rgba(108, 71, 255, 0.6);
+  font-weight: 600;
+}
+
+.hero .actions a[data-variant='primary']:hover {
+  filter: brightness(1.1);
+}
+
+/* ───── Animated status cards in the hero (Harness-inspired) ───── */
+
+.hero-visual {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Foundry Agent Services mark — faint backdrop behind the animated cards. */
+.hero-agent-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: clamp(180px, 22vw, 260px);
+  height: clamp(180px, 22vw, 260px);
+  transform: translate(-50%, -50%);
+  opacity: 0.25;
+  filter: drop-shadow(0 0 32px rgba(130, 81, 238, 0.35));
+  animation: hero-mark-breathe 6s ease-in-out infinite;
+}
+
+@keyframes hero-mark-breathe {
+  0%, 100% {
+    opacity: 0.22;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.32;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+.hero-cards {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-card {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: rgba(20, 22, 38, 0.85);
+  border: 1px solid rgba(108, 71, 255, 0.28);
+  border-radius: 0.75rem;
+  color: #e6e7ee;
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow:
+    0 8px 32px -12px rgba(0, 0, 0, 0.6),
+    0 0 24px -8px rgba(108, 71, 255, 0.35);
+  opacity: 0;
+  animation: hero-card-float 9s ease-in-out infinite;
+}
+
+.hero-card .check {
+  color: #00dccc;
+  font-weight: 700;
+}
+
+.hero-card .dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #00dccc;
+  box-shadow: 0 0 8px #00dccc;
+  display: inline-block;
+}
+
+.hero-card.card-1 {
+  top: 8%;
+  right: 18%;
+  animation-delay: 0s;
+}
+
+.hero-card.card-2 {
+  top: 38%;
+  right: 4%;
+  animation-delay: 1.5s;
+}
+
+.hero-card.card-3 {
+  top: 64%;
+  right: 26%;
+  animation-delay: 3s;
+}
+
+.hero-card.card-4 {
+  top: 88%;
+  right: 8%;
+  animation-delay: 4.5s;
+}
+
+@keyframes hero-card-float {
+  0%, 100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  10%, 70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  85% {
+    opacity: 0.6;
+    transform: translateY(-4px);
+  }
+}
+
+/* Light-mode hero card overrides — darker cards pop better on white. */
+:root:not([data-theme='dark']) .hero-card {
+  background: rgba(26, 14, 58, 0.92);
+  border-color: rgba(108, 71, 255, 0.35);
+  box-shadow:
+    0 8px 32px -12px rgba(108, 71, 255, 0.3),
+    0 0 24px -8px rgba(108, 71, 255, 0.2);
+}
+
+/* ───── Card grid (used on landing page below the hero) ───── */
+
+.card-grid {
+  margin-block-start: 3rem;
+}
+
+starlight-card,
+.card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--sl-color-gray-5);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+starlight-card:hover,
+.card:hover {
+  border-color: var(--sl-color-accent);
+  transform: translateY(-2px);
+}
+
+/* ───── Subtle inline badge style for `validity_date` callouts in recipes ───── */
+
+.validity {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(108, 71, 255, 0.15);
+  color: var(--sl-color-accent-high);
+  font-size: 0.75rem;
+  font-weight: 500;
+}

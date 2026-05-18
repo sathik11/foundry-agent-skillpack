@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+kind: hosted
+name: langgraph-chat-fixture
+protocols:
+  - protocol: responses
+    version: 1.0.0
+resources:
+  cpu: "0.25"
+  memory: 0.5Gi
+environment_variables:
+  - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+    value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+  - name: ENABLE_INSTRUMENTATION
+    value: "true"
+  - name: ENABLE_SENSITIVE_DATA
+    value: "true"
+  # FOUNDRY_*, AGENT_*, APPLICATIONINSIGHTS_* are platform-injected — never declare.

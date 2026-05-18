@@ -1,0 +1,32 @@
+name: foundry-agent-skillpack
+version: 0.20.0
+# v0.20.0:
+#   - Closes TD-2: `/publish-teams` prompt + identity-flip handling (configure-rbac
+#     `post_publish` mode + `publish` section in agent-status schema v1.1).
+#   - Closes TD-10: deep-network walkers (NSG / Azure Firewall / Service Endpoint
+#     Policy) gated behind `--deep`, BYO VNet + PE Bicep scaffold, and the
+#     foundry-prod-readiness/network-troubleshooter.md runbook.
+#   - TD-19 (alias retirement) remains active; the `aliases:` block below stays
+#     for one more release window. A future v0.20.x or v0.21.0 will drop it.
+# v0.19.0: package renamed from `foundry-agent-harness` to `foundry-agent-skillpack`.
+# The alias keeps the old name resolving for one release; consumers should update
+# their `apm.yml` `dependencies:` block before the alias drops. See TD-19.
+aliases: [foundry-agent-harness]
+description: >
+  End-to-end skillpack for Microsoft Foundry hosted agents — knowledge skills,
+  slash commands, convergent lifecycle scripts, and durable per-agent state for
+  planning, deploying, governing, evaluating, and auditing hosted and prompt
+  agents on Foundry.
+author: Sathik Basha
+license: MIT
+repository: https://github.com/sathik11/Foundry-Hosted-Agent-Skill
+
+# APM auto-discovers .apm/skills, .apm/prompts, .apm/agents, .apm/instructions.
+includes: auto
+
+# Clients APM should deploy into on `apm install`. APM CLI 0.12+ uses `targets:` (plural).
+# - `agent-skills` deploys generic skills into `.agents/skills/...` (works for any client).
+# - `copilot` deploys prompts/instructions/chatmodes into `.github/`.
+# - Per-client targets (`claude`, `cursor`, `windsurf`, `codex`, `gemini`, `opencode`)
+#   write into the matching `.<client>/` folder.
+targets: [agent-skills, copilot, claude, cursor, windsurf, codex, gemini, opencode]

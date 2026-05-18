@@ -1,0 +1,22 @@
+schema_version: 1
+agent_kind: hosted
+
+capabilities:
+
+  toolbox:
+    enabled: true
+    mcp_servers:
+      - server_label: microsoft_learn
+        url: https://learn.microsoft.com/api/mcp
+        require_approval: never
+
+  guardrails:
+    enabled: true
+    layers: [middleware]
+    middleware_mode: entry
+
+  evals:
+    role: orchestrator
+    judge_model: gpt-5.4-mini-1
+    interval_hours: 1
+    max_traces: 200

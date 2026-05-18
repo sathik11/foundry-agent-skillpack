@@ -1,0 +1,11 @@
+name: Foundry-Hosted-Agent-Skill
+version: 1.0.0
+description: APM project for Foundry-Hosted-Agent-Skill
+author: sathik11
+targets: [copilot, agent-skills]
+dependencies:
+  apm:
+  - ./foundry-agent-skillpack
+  mcp: []
+includes: auto
+scripts: {}

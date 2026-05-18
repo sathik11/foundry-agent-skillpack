@@ -1,0 +1,15 @@
+# Tool success rate by tool name, last 1h.
+// Replace <agent_name> with cloud_RoleName.
+dependencies
+| where timestamp > ago(1h)
+| where cloud_RoleName == "<agent_name>"
+| where name == "execute_tool"
+| extend tool = tostring(customDimensions.["tool.name"])
+| summarize
+    calls = count(),
+    failures = countif(success == false),
+    p50_ms = percentile(duration, 50),
+    p95_ms = percentile(duration, 95)
+    by tool
+| extend success_rate = round(1.0 - todouble(failures)/todouble(calls), 4)
+| order by calls desc

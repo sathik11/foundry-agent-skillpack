@@ -1,0 +1,2 @@
+// astro env.d.ts
+/// <reference path="../.astro/types.d.ts" />

@@ -1,0 +1,198 @@
+"""${AGENT_NAME} — LangGraph hosted on Foundry (Responses protocol).
+
+A multi-turn chat agent built with LangGraph + Azure OpenAI, hosted via the
+azure-ai-agentserver-responses (BYO) adapter.
+
+Conversation state: NOT stored in-memory. The Foundry platform manages history
+via `previous_response_id` / `conversation`; this code fetches it through
+`context.get_history()` and replays it into LangGraph each turn.
+
+Tracing: LangGraph + LLM + tool spans auto-instrument via langchain-azure-ai
+(when APPLICATIONINSIGHTS_CONNECTION_STRING is present — auto-injected by
+Foundry hosted; set manually for local dev).
+
+Required env vars:
+  FOUNDRY_PROJECT_ENDPOINT          (auto-injected by Foundry; set locally)
+  AZURE_AI_MODEL_DEPLOYMENT_NAME    (resolved from agent.manifest.yaml at deploy)
+
+Local dev:
+  export FOUNDRY_PROJECT_ENDPOINT="https://<acct>.services.ai.azure.com/api/projects/<proj>"
+  export AZURE_AI_MODEL_DEPLOYMENT_NAME="gpt-4.1-mini"
+  python main.py
+  # POST http://localhost:8088/responses
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+from datetime import datetime, timezone
+from typing import Annotated
+
+from azure.ai.agentserver.responses import (
+    CreateResponse,
+    ResponseContext,
+    ResponsesAgentServerHost,
+    ResponsesServerOptions,
+    TextResponse,
+)
+from azure.ai.agentserver.responses.models import (
+    MessageContentInputTextContent,
+    MessageContentOutputTextContent,
+)
+from azure.identity import DefaultAzureCredential
+from langchain_azure_ai.chat_models import AzureAIOpenAIApiChatModel
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.tools import tool
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict
+
+# ── Configuration ───────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+if not os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
+    logger.warning(
+        "APPLICATIONINSIGHTS_CONNECTION_STRING not set — traces will not be sent to "
+        "Application Insights. Set it for local telemetry. "
+        "(Auto-injected in hosted Foundry containers — never declare it in agent.manifest.yaml.)"
+    )
+
+FOUNDRY_PROJECT_ENDPOINT = os.environ.get("FOUNDRY_PROJECT_ENDPOINT")
+if not FOUNDRY_PROJECT_ENDPOINT:
+    raise EnvironmentError(
+        "FOUNDRY_PROJECT_ENDPOINT not set. Hosted: auto-injected. "
+        "Local: set it manually or use 'azd ai agent run'."
+    )
+
+AZURE_AI_MODEL_DEPLOYMENT_NAME = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME")
+if not AZURE_AI_MODEL_DEPLOYMENT_NAME:
+    raise EnvironmentError(
+        "AZURE_AI_MODEL_DEPLOYMENT_NAME not set. Resolve via agent.manifest.yaml resources block."
+    )
+
+# ── Tools ───────────────────────────────────────────────────────────
+# Replace these with your own. Each tool is a LangChain @tool with a docstring
+# that the model uses to decide when to invoke it.
+@tool
+def get_current_time() -> str:
+    """Return the current UTC date and time."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+@tool
+def calculator(expression: str) -> str:
+    """Evaluate a simple math expression and return the result."""
+    try:
+        result = eval(expression, {"__builtins__": {}})  # noqa: S307
+        return str(result)
+    except Exception as exc:
+        return f"Error: {exc}"
+
+
+TOOLS = [get_current_time, calculator]
+
+
+# ── LangGraph definition ────────────────────────────────────────────
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+def _build_graph() -> StateGraph:
+    """Build and compile the LangGraph agent graph."""
+    llm = AzureAIOpenAIApiChatModel(
+        project_endpoint=FOUNDRY_PROJECT_ENDPOINT,
+        credential=DefaultAzureCredential(),
+        model=AZURE_AI_MODEL_DEPLOYMENT_NAME,
+        streaming=True,
+    )
+    llm_with_tools = llm.bind_tools(TOOLS)
+
+    def chatbot(state: State):
+        return {"messages": [llm_with_tools.invoke(state["messages"])]}
+
+    def route_tools(state: State):
+        last = state["messages"][-1]
+        if hasattr(last, "tool_calls") and last.tool_calls:
+            return "tools"
+        return END
+
+    graph = StateGraph(State)
+    graph.add_node("chatbot", chatbot)
+    graph.add_node("tools", ToolNode(tools=TOOLS))
+    graph.add_edge(START, "chatbot")
+    graph.add_conditional_edges("chatbot", route_tools, {"tools": "tools", END: END})
+    graph.add_edge("tools", "chatbot")
+    return graph.compile()
+
+
+GRAPH = _build_graph()
+
+
+# ── Helpers ─────────────────────────────────────────────────────────
+def _history_to_langchain_messages(history: list) -> list:
+    """Convert responses-protocol history items to LangChain messages.
+
+    Foundry's history payload mirrors the OpenAI Responses content-block model:
+    message items contain `content` lists with InputText / OutputText blocks
+    (per-role). We collapse those into LangChain HumanMessage / AIMessage so
+    LangGraph sees a clean conversation.
+    """
+    messages = []
+    for item in history:
+        if hasattr(item, "content") and item.content:
+            for content in item.content:
+                if isinstance(content, MessageContentOutputTextContent) and content.text:
+                    messages.append(AIMessage(content=content.text))
+                elif isinstance(content, MessageContentInputTextContent) and content.text:
+                    messages.append(HumanMessage(content=content.text))
+    return messages
+
+
+# ── Agent server wiring ─────────────────────────────────────────────
+app = ResponsesAgentServerHost(
+    options=ResponsesServerOptions(default_fetch_history_count=20),
+)
+
+
+@app.response_handler
+async def handle_create(
+    request: CreateResponse,
+    context: ResponseContext,
+    cancellation_signal: asyncio.Event,
+):
+    """Run the LangGraph agent and stream the response."""
+
+    async def run_graph():
+        try:
+            try:
+                history = await context.get_history()
+            except Exception:
+                history = []
+
+            current_input = await context.get_input_text() or "Hello!"
+            lc_messages = _history_to_langchain_messages(history)
+            lc_messages.append(HumanMessage(content=current_input))
+
+            result = await GRAPH.ainvoke({"messages": lc_messages})
+
+            # AzureAIOpenAIApiChatModel can return content as a list of blocks
+            # (Responses-API style) or as a plain string. Normalize.
+            raw = result["messages"][-1].content
+            if isinstance(raw, list):
+                yield "".join(
+                    (block.get("text", "") if isinstance(block, dict) else str(block))
+                    for block in raw
+                )
+            else:
+                yield raw or ""
+        except Exception as exc:
+            logger.exception("run_graph failed")
+            yield f"[ERROR] {type(exc).__name__}: {exc}"
+
+    return TextResponse(context, request, text=run_graph())
+
+
+if __name__ == "__main__":
+    app.run()

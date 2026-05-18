@@ -1,0 +1,23 @@
+{
+  "name": "foundry-agent-skillpack-docs",
+  "version": "0.18.0",
+  "description": "Documentation site for Foundry Agent Skillpack — the end-to-end skillpack for Microsoft Foundry hosted agents.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/mirror-recipes.mjs",
+    "predev": "node scripts/mirror-recipes.mjs",
+    "prestart": "node scripts/mirror-recipes.mjs",
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "mirror-recipes": "node scripts/mirror-recipes.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.30.0",
+    "astro": "^5.0.0",
+    "sharp": "^0.33.5"
+  }
+}

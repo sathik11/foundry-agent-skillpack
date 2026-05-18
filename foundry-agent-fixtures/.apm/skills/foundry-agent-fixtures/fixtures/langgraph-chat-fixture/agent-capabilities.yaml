@@ -1,0 +1,31 @@
+# Capability declaration for the langgraph-chat-fixture.
+# Drives /prepare-deploy gates, /configure-rbac grants, /verify-agent checks,
+# and /setup-evals evaluator selection.
+schema_version: 1
+agent_kind: hosted
+
+capabilities:
+  # No external knowledge — fixture uses only local @tool functions.
+  # No guardrails block — kept minimal for a clean smoke test.
+
+  # Continuous evaluation: the outer-loop concern this fixture exercises.
+  # /setup-evals will pick: relevance + task_adherence + indirect_attack
+  # (orchestrator role default, no toolbox-driven additions since tools are local).
+  evals:
+    role: orchestrator
+    judge_model: gpt-4.1-mini
+    continuous:
+      enabled: true
+      sample_rate: 1.0           # evaluate every response — fine for smoke test traffic
+      max_hourly_runs: 100
+      judge_model: gpt-4.1-mini
+      evaluators:                # explicit so the fixture is deterministic
+        - id: relevance
+        - id: task_adherence
+        - id: indirect_attack
+
+  # Network: public class. If you redeploy this fixture into a managed_vnet
+  # Foundry account, set network.class accordingly (and ensure ACR public
+  # access is Enabled — see foundry-prod-readiness/networking.md).
+  network:
+    class: public

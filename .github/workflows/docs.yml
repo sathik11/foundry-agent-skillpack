@@ -1,0 +1,86 @@
+name: Docs — Build & Deploy to Azure Static Web Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+      # Drift check needs to run when skillpack sources change too.
+      - 'foundry-agent-skillpack/.apm/skills/**'
+      - 'foundry-agent-skillpack/.apm/prompts/**'
+      - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
+      # Recipe mirror needs to re-run when fixtures recipes change.
+      - 'foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'foundry-agent-skillpack/.apm/skills/**'
+      - 'foundry-agent-skillpack/.apm/prompts/**'
+      - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
+      - 'foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write   # required by SWA action to comment preview URL on PRs
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    name: Build Astro Starlight + deploy to Azure Static Web Apps
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          lfs: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        working-directory: docs
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Check for docs ↔ skillpack drift (non-blocking)
+        run: |
+          echo "## 📋 Docs drift check" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          node docs/scripts/check-drift.mjs >> "$GITHUB_STEP_SUMMARY" || true
+        continue-on-error: true
+
+      - name: Build Astro
+        working-directory: docs
+        run: npm run build
+
+      - name: Deploy to Azure Static Web Apps
+        id: swa
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          # Get the token from the SWA you create in your subscription:
+          # Azure Portal → your SWA → Overview → Manage deployment token
+          # Add it as a repo secret: AZURE_STATIC_WEB_APPS_API_TOKEN
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          # The site is pre-built by `npm run build`; tell SWA to skip its own build.
+          app_location: 'docs/dist'
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+          skip_api_build: true

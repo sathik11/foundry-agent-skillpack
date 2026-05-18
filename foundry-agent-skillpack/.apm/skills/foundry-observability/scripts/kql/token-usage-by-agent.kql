@@ -1,0 +1,15 @@
+# Token usage by model + agent, last 24h.
+dependencies
+| where timestamp > ago(24h)
+| where name == "model_response"
+| extend agent = cloud_RoleName,
+         model = tostring(customDimensions.["model.name"]),
+         input_tokens = toint(customDimensions.["usage.input_tokens"]),
+         output_tokens = toint(customDimensions.["usage.output_tokens"])
+| summarize
+    calls = count(),
+    in_tokens = sum(input_tokens),
+    out_tokens = sum(output_tokens)
+    by agent, model
+| extend total = in_tokens + out_tokens
+| order by total desc

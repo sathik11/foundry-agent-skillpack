@@ -1,0 +1,21 @@
+# ContainerAgent definition (informational — REST API is source of truth).
+# `azd up` reads this and translates it into the POST /agents/{name}/versions body.
+kind: hosted
+name: ${AGENT_NAME}
+description: ${AGENT_DESCRIPTION}
+
+container:
+  image: ${ACR_NAME}.azurecr.io/${AGENT_NAME}:placeholder   # azd overwrites with timestamped tag
+  cpu: 1.0
+  memory: 2.0Gi
+
+model:
+  deployment_name: ${MODEL_DEPLOYMENT_NAME}
+
+instance_identity:
+  type: system_assigned
+
+environment_variables:
+  ENABLE_INSTRUMENTATION: "true"
+  SENSITIVE_DATA: "false"
+  # AZURE_CONTENT_SAFETY_ENDPOINT: <set after Phase B grant via env-var-only redeploy>

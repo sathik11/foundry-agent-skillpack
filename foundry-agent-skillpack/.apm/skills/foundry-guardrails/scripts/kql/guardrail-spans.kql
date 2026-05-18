@@ -1,0 +1,10 @@
+// Guardrail spans — counts by layer, last 1h.
+// Usage: replace <agent_name> with your agent's cloud_RoleName.
+dependencies
+| where timestamp > ago(1h)
+| where cloud_RoleName == "<agent_name>"
+| where name startswith "guardrail."
+| extend layer = tostring(customDimensions.["guardrail.layer"])
+| extend reason = tostring(customDimensions.["guardrail.reason"])
+| summarize blocks=count() by layer, reason
+| order by blocks desc

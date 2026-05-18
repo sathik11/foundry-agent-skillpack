@@ -1,0 +1,13 @@
+# Refreshed Foundry hosted-agents preview (April 2026) — pin the alpha exactly.
+agent-framework>=1.2.2
+agent-framework-foundry-hosting==1.0.0a260429
+azure-identity<1.26.0a0
+
+# Telemetry — auto-instruments + ships spans to App Insights using the
+# APPLICATIONINSIGHTS_CONNECTION_STRING that Foundry auto-injects.
+azure-monitor-opentelemetry>=1.7
+
+# Optional — uncomment per declared capability. See runtime-dependencies.md.
+# azure-ai-contentsafety>=1.0.0   # Layer 2 guardrails (content_safety)
+# httpx>=0.27                      # Layer 1.5 Purview DLP middleware
+# opentelemetry-api>=1.27          # Layer 1.5 Purview DLP middleware (OTel spans)
