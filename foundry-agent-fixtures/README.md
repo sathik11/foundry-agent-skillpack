@@ -26,8 +26,8 @@ version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
 
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures   # this package
+apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures   # this package
 ```
 
 After install you'll see (under `agent-skills` target → `.agents/skills/`):

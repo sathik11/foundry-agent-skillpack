@@ -72,7 +72,7 @@ capabilities:
     region: eastus2
 ```
 
-Full schema with all fields, validation rules, and gate matrix is shipped under the **foundry-deploy** skill — see [`capabilities-manifest.md`](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/capabilities-manifest.md) on GitHub.
+Full schema with all fields, validation rules, and gate matrix is shipped under the **foundry-deploy** skill — see [`capabilities-manifest.md`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/capabilities-manifest.md) on GitHub.
 
 ## How prompts dispatch on it
 

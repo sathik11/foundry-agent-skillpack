@@ -1,11 +1,11 @@
 ---
 name: foundry-skillpack-builder
-description: 'Context loader for maintainers fixing bugs / triaging issues in THIS repo (the Foundry-Hosted-Agent-Skill APM monorepo that ships `foundry-agent-skillpack` + `foundry-agent-fixtures`). USE WHEN: a bug is reported against the skillpack, a recipe is broken, a prompt or skill misbehaves on a consumer install, a script under `.apm/skills/*/scripts/` errors, docs site drift is reported, TECHNICAL_DEBT entry needs work, or a roadmap item starts. Sets up source-of-truth boundaries (`.apm/` vs installed `.agents/` + `.github/` copies), maps symptom → likely owning skill/prompt/script, and runs the local install verification loop. DO NOT USE FOR: building or deploying a Foundry agent end-to-end (that is what consumers do via the slash commands — use `foundry-engineer` agent or the shipped prompts). DO NOT USE FOR: docs-site authoring outside drift triage (edit `docs/src/content/docs/` directly).'
+description: 'Context loader for maintainers fixing bugs / triaging issues in THIS repo (the foundry-agent-skillpack APM monorepo that ships `foundry-agent-skillpack` + `foundry-agent-fixtures`). USE WHEN: a bug is reported against the skillpack, a recipe is broken, a prompt or skill misbehaves on a consumer install, a script under `.apm/skills/*/scripts/` errors, docs site drift is reported, TECHNICAL_DEBT entry needs work, or a roadmap item starts. Sets up source-of-truth boundaries (`.apm/` vs installed `.agents/` + `.github/` copies), maps symptom → likely owning skill/prompt/script, and runs the local install verification loop. DO NOT USE FOR: building or deploying a Foundry agent end-to-end (that is what consumers do via the slash commands — use `foundry-engineer` agent or the shipped prompts). DO NOT USE FOR: docs-site authoring outside drift triage (edit `docs/src/content/docs/` directly).'
 ---
 
 # Foundry Skillpack Builder
 
-Context bootstrap for maintainers of the **Foundry-Hosted-Agent-Skill** monorepo. Load this skill at the start of any bug-fix, issue-triage, or feature-work session so you start from the right files and never edit a regenerated copy by mistake.
+Context bootstrap for maintainers of the **foundry-agent-skillpack** monorepo. Load this skill at the start of any bug-fix, issue-triage, or feature-work session so you start from the right files and never edit a regenerated copy by mistake.
 
 ## When to load this skill
 
@@ -33,7 +33,7 @@ Context bootstrap for maintainers of the **Foundry-Hosted-Agent-Skill** monorepo
 ## Repo map (load this once into context)
 
 ```
-Foundry-Hosted-Agent-Skill/                  ← monorepo (this repo)
+foundry-agent-skillpack/                  ← monorepo (this repo)
 ├── apm.yml                                  ← top-level APM aggregator
 ├── README.md                                 ← consumer overview
 ├── ROADMAP.md                                ← v0.x sequencing
@@ -43,13 +43,14 @@ Foundry-Hosted-Agent-Skill/                  ← monorepo (this repo)
 ├── foundry-agent-skillpack/                   ← PACKAGE 1 — engineering knowledge
 │   ├── apm.yml
 │   ├── README.md
-│   ├── TECHNICAL_DEBT.md                     ← TD-1..TD-17 (single source for gaps)
+│   ├── TECHNICAL_DEBT.md                     ← TD-1..TD-19 (single source for gaps)
 │   └── .apm/
 │       ├── skills/foundry-{deploy,evals,fabric,failure-modes,guardrails,
 │       │            identity,knowledge,multi-agent,observability,patterns,
 │       │            prod-readiness,purview,roles,skills,teams-workiq}/
 │       ├── prompts/{plan-agent,prepare-deploy,configure-rbac,verify-agent,
-│       │            setup-evals,setup-purview,troubleshoot,audit-drift}.prompt.md
+│       │            setup-evals,setup-purview,publish-teams,troubleshoot,
+│       │            audit-drift}.prompt.md
 │       ├── agents/foundry-engineer.agent.md
 │       └── instructions/foundry-conventions.md
 │
@@ -58,7 +59,7 @@ Foundry-Hosted-Agent-Skill/                  ← monorepo (this repo)
 │   ├── README.md
 │   └── .apm/skills/foundry-agent-fixtures/
 │       ├── fixtures/{learn-agent,langgraph-chat-fixture}/
-│       └── recipes/0{1..5}-*.md
+│       └── recipes/0{1..6}-*.md
 │
 ├── docs/                                    ← Astro Starlight site → Azure SWA
 │   ├── astro.config.mjs
@@ -75,16 +76,16 @@ When a bug is reported, jump to the owning area first.
 
 | Symptom | Most likely lives in |
 |---|---|
-| Slash command (`/plan-agent`, `/prepare-deploy`, `/configure-rbac`, `/verify-agent`, `/setup-evals`, `/setup-purview`, `/troubleshoot`, `/audit-drift`) misbehaves | `foundry-agent-skillpack/.apm/prompts/<name>.prompt.md` |
+| Slash command (`/plan-agent`, `/prepare-deploy`, `/configure-rbac`, `/verify-agent`, `/setup-evals`, `/setup-purview`, `/publish-teams`, `/troubleshoot`, `/audit-drift`) misbehaves | `foundry-agent-skillpack/.apm/prompts/<name>.prompt.md` |
 | RBAC role wrong / missing | `foundry-agent-skillpack/.apm/skills/foundry-roles/` (preflight) **or** `foundry-identity/scripts/grant-rbac.sh` (dispatch) |
 | Eval / red-team SDK call drifted | `foundry-agent-skillpack/.apm/skills/foundry-evals/scripts/ensure_*.py` (and `_common.py`) — see TD-8, TD-9 |
 | Knowledge source RBAC / network gate wrong | `foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/{verify-source-rbac,verify-source-network}.sh` |
-| Network detection (publicNetworkAccess, PE, NSG) wrong | `foundry-agent-skillpack/.apm/skills/foundry-prod-readiness/scripts/network/*.sh` (TD-10 covers NSG/Firewall gap) |
+| Network detection (publicNetworkAccess, PE, NSG) wrong | `foundry-agent-skillpack/.apm/skills/foundry-prod-readiness/scripts/network/*.sh` (TD-10 deep walkers shipped in v0.20.0) |
 | Purview DLP middleware / classify call wrong | `foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/purview_dlp_middleware.py` (TD-4) |
 | Per-agent durable state corrupt | `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/agent_status.py` + `agent-status-schema.md` |
 | Brownfield code scan miss | `foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/scan_knowledge_refs.py` (TD-13 — regex-only by design) |
 | Capability manifest ↔ live world drift report wrong | `foundry-agent-skillpack/.apm/prompts/audit-drift.prompt.md` (no scripts; pure prompt) |
-| Recipe instructions stale | `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/0{1..5}-*.md` — bump `validity_date` after fix |
+| Recipe instructions stale | `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/0{1..6}-*.md` — bump `validity_date` after fix |
 | Fixture (`learn-agent` / `langgraph-chat-fixture`) won't deploy | `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/fixtures/<name>/` |
 | Docs site missing a skill / prompt / TD | run `node docs/scripts/check-drift.mjs` (TD-17 Phase 1); fix in `docs/src/content/docs/` |
 | Coding-convention question (SDK pin, env-var prefix, deploy boundary) | `foundry-agent-skillpack/.apm/instructions/foundry-conventions.md` |
@@ -113,7 +114,7 @@ These are non-negotiable boundaries — a bug fix that crosses any of these is t
 ### 2. Cross-check related context
 - Skill-level context: read the owning skill's `SKILL.md` + any sub-doc the prompt or script references.
 - Cross-cutting context: check `foundry-conventions.md` (SDK pins, deploy boundary, env vars) before changing anything that touches build / deploy.
-- If the symptom matches a known limitation, check `TECHNICAL_DEBT.md` (TD-1..TD-17) — the fix may already be designed and "deferred until X".
+- If the symptom matches a known limitation, check `TECHNICAL_DEBT.md` (TD-1..TD-19) — the fix may already be designed and "deferred until X".
 
 ### 3. Implement the smallest fix
 - Bug fix: edit only the offending file under `.apm/`.
@@ -139,16 +140,16 @@ targets: [copilot, agent-skills]
 EOF
 
 # Install the skillpack from your local working tree
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
 # Optional — fixtures + recipes
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures
+apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures
 
 find . -maxdepth 4 -not -path '*/apm_modules/*' | sort
 ```
 
 Expected shape after install:
 - `.agents/skills/` — 15 directories from skillpack (+ `foundry-agent-fixtures/` if installed).
-- `.github/prompts/` — 8 `*.prompt.md`.
+- `.github/prompts/` — 9 `*.prompt.md`.
 - `.github/agents/` — `foundry-engineer.agent.md`.
 
 Anything stray at the package root being treated as a skill = a file outside `.apm/` is leaking into the package. Fix the file location and reinstall.

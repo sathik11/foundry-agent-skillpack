@@ -44,7 +44,7 @@ version: 0.0.1
 targets: [copilot, agent-skills]   # add claude / cursor / windsurf as needed
 EOF
 
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 ```
 
 ## 3. Where files land
@@ -228,7 +228,7 @@ name: apm-install-test
 version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
 find . -maxdepth 4 -not -path '*/apm_modules/*' | sort
 ```
 

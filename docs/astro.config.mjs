@@ -17,11 +17,11 @@ export default defineConfig({
         replacesTitle: false,
       },
       social: {
-        github: 'https://github.com/sathik11/Foundry-Hosted-Agent-Skill',
+        github: 'https://github.com/sathik11/foundry-agent-skillpack',
       },
       editLink: {
         baseUrl:
-          'https://github.com/sathik11/Foundry-Hosted-Agent-Skill/edit/main/docs/src/content/docs/',
+          'https://github.com/sathik11/foundry-agent-skillpack/edit/main/docs/src/content/docs/',
       },
       lastUpdated: true,
       customCss: ['./src/styles/custom.css'],

@@ -11,7 +11,7 @@ The full step-by-step lives in **Recipe 02** inside the fixtures package:
 .agents/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md
 ```
 
-[View the recipe on GitHub →](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md)
+[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md)
 
 ## What's different from greenfield
 

@@ -27,8 +27,8 @@ name: apm-install-test
 version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures   # opt-in
+apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
+apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures   # opt-in
 ```
 
 **Expected output:**

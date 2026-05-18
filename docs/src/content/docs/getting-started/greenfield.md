@@ -11,7 +11,7 @@ The full step-by-step lives in **Recipe 01** inside the fixtures package. After 
 .agents/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md
 ```
 
-[View the recipe on GitHub →](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)
+[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)
 
 ## What you'll touch
 

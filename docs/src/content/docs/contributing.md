@@ -3,7 +3,7 @@ title: Contributing
 description: How to propose changes, add a skill, add a recipe, or update content.
 ---
 
-The skillpack is two APM packages plus a docs site. Contributions land via PRs to [github.com/sathik11/Foundry-Hosted-Agent-Skill](https://github.com/sathik11/Foundry-Hosted-Agent-Skill).
+The skillpack is two APM packages plus a docs site. Contributions land via PRs to [github.com/sathik11/foundry-agent-skillpack](https://github.com/sathik11/foundry-agent-skillpack).
 
 ## Maintainers
 
@@ -17,14 +17,14 @@ For substantive proposals (new skill, new recipe, capability-gate changes) pleas
 ## Repo layout
 
 ```
-Foundry-Hosted-Agent-Skill/
+foundry-agent-skillpack/
 ├── foundry-agent-skillpack/        # Engineering package (skills + prompts + scripts)
 │   ├── apm.yml
 │   ├── README.md
 │   ├── TECHNICAL_DEBT.md
 │   └── .apm/
 │       ├── skills/               # 15 skills
-│       ├── prompts/              # 8 slash commands
+│       ├── prompts/              # 9 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
 ├── foundry-agent-fixtures/       # Fixtures + recipes (opt-in)
@@ -32,7 +32,7 @@ Foundry-Hosted-Agent-Skill/
 │   ├── README.md
 │   └── .apm/skills/foundry-agent-fixtures/
 │       ├── fixtures/             # learn-agent, langgraph-chat-fixture
-│       └── recipes/              # 5 end-to-end walkthroughs
+│       └── recipes/              # 6 end-to-end walkthroughs
 ├── docs/                         # This Astro Starlight site
 ├── ROADMAP.md
 ├── TESTING.md
@@ -58,7 +58,7 @@ Foundry-Hosted-Agent-Skill/
    ---
    ```
 2. Cross-link from related skills' router tables.
-3. If the skill interacts with `agent-capabilities.yaml`, document Phase A / B / C gates in a `capability-gates.md` sub-doc and update [`foundry-deploy/capabilities-manifest.md`](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/capabilities-manifest.md).
+3. If the skill interacts with `agent-capabilities.yaml`, document Phase A / B / C gates in a `capability-gates.md` sub-doc and update [`foundry-deploy/capabilities-manifest.md`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/capabilities-manifest.md).
 4. Add the skill to the [Skills overview](/skills/) page in this site.
 
 ## Adding a vendored script
@@ -78,7 +78,7 @@ Recipes live in `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recip
 
 - Frontmatter must include `validity_date`, `audience`, `duration`, `surfaces` (list), `prerequisites` (list).
 - Must touch **3 surfaces minimum**: agent runtime + tools/knowledge + at least one outer-loop concern (guardrails / eval / red-team / Purview).
-- Numbered: `<NN>-<short-name>.md`. Add to the [recipes README](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/README.md) table.
+- Numbered: `<NN>-<short-name>.md`. Add to the [recipes README](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/README.md) table.
 - Add to the [Recipes overview](/recipes/) page in this site.
 
 ## Adding a fixture
@@ -99,8 +99,8 @@ name: apm-install-test
 version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures
+apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
+apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures
 
 # Verify expected counts
 ls .agents/skills | wc -l            # → 16

@@ -38,7 +38,7 @@ const SRC_DIR = join(
 );
 const DST_DIR = join(__dirname, '..', 'src', 'content', 'docs', 'recipes');
 const GITHUB_BASE =
-  'https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main';
+  'https://github.com/sathik11/foundry-agent-skillpack/blob/main';
 
 if (!existsSync(SRC_DIR)) {
   console.error(`[mirror-recipes] source directory not found: ${SRC_DIR}`);

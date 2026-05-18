@@ -3,8 +3,8 @@
 End-to-end agent recipes for the Foundry hosted-agent skillpack. **Recipes live in the [foundry-agent-fixtures](foundry-agent-fixtures/) package** — install it to get them locally:
 
 ```bash
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures   # ← brings recipes + fixtures
+apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures   # ← brings recipes + fixtures
 ```
 
 After install, the recipe files land at `.agents/skills/foundry-agent-fixtures/recipes/`.

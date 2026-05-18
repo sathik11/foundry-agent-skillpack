@@ -12,7 +12,7 @@ prerequisites:
 
 # Recipe 06 — Multi-Agent Orchestration with Data Buffer + SSE Streaming
 
-> **👋 Brand new to Foundry?** This recipe assumes you've already deployed at least one working hosted agent — its prerequisites build on the lifecycle (`/plan-agent` → `/prepare-deploy` → `azd up` → `/configure-rbac` → `/verify-agent`) that Recipe 01 walks you through end-to-end. If you've never deployed a Foundry hosted agent before, **start with [Recipe 01 — Greenfield quickstart](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)** (~30 min) and come back here after.
+> **👋 Brand new to Foundry?** This recipe assumes you've already deployed at least one working hosted agent — its prerequisites build on the lifecycle (`/plan-agent` → `/prepare-deploy` → `azd up` → `/configure-rbac` → `/verify-agent`) that Recipe 01 walks you through end-to-end. If you've never deployed a Foundry hosted agent before, **start with [Recipe 01 — Greenfield quickstart](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)** (~30 min) and come back here after.
 
 > **Goal:** Decompose a single agent that is hitting a wall (latency, scope creep, model right-sizing) into an orchestrator + N sibling sub-agents, using the inter-tool **data buffer** pattern to bypass the LLM serialization bottleneck and SSE streaming to survive long pipelines. End state: 9-minute end-to-end pipeline with per-sub-agent OTel spans, per-sub-agent continuous eval, and orchestrator + sibling identities/RBAC graduated to production-shape.
 
@@ -24,7 +24,7 @@ You write more code than in recipes 01–05 because the `agent-framework` templa
 
 | Symptom in your single agent | Does this recipe help? |
 |---|---|
-| Total response time 30-60s, mostly LLM thinking | **No** — first try a smaller / faster model and middleware short-circuit ([Pattern 1c](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md)) |
+| Total response time 30-60s, mostly LLM thinking | **No** — first try a smaller / faster model and middleware short-circuit ([Pattern 1c](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md)) |
 | Agent does 3+ distinct kinds of work (harvest + score + narrate) and reasoning bleeds across them | **Yes** — sibling decomposition lets each sub-agent own its job |
 | Orchestrator passes 25+ records / 20KB+ between tool calls; latency spikes by 40-60s per hop | **Yes** — this is the data-buffer pattern, the core motivation |
 | Pipeline runs > 120s end-to-end, SSE stream times out | **Yes** — Step 5 covers SSE streaming and timeout config |
@@ -44,7 +44,7 @@ You write more code than in recipes 01–05 because the `agent-framework` templa
 | Identity | One Entra Agent ID per agent (orchestrator + each sibling) |
 | RBAC | Per-agent service-principal grants (orchestrator does NOT inherit sub-agent grants) |
 
-Reference: every code shape in this recipe traces to [foundry-multi-agent/SKILL.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). The pattern decision matrix is in [foundry-patterns/SKILL.md § Multi-Agent Patterns](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md).
+Reference: every code shape in this recipe traces to [foundry-multi-agent/SKILL.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). The pattern decision matrix is in [foundry-patterns/SKILL.md § Multi-Agent Patterns](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md).
 
 ---
 
@@ -345,7 +345,7 @@ Wire `fetch_feedback` into the harvester's agent constructor in `main.py` (the t
 > - **MCP tool**: `result = await client.call_tool("crm.list_feedback", {"window_days": window_days})` → `return json.dumps(result["records"])`
 > - **AI Search**: query a `feedback-index` with `window_days` → JSON-serialise the hits
 > - **Fabric**: notebookutils → Delta table read → `df.to_json(orient="records")`
-> See [foundry-knowledge/decision-tree.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-knowledge/decision-tree.md) for how to pick which one.
+> See [foundry-knowledge/decision-tree.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-knowledge/decision-tree.md) for how to pick which one.
 
 ### 3b — Harvester: instructions
 
@@ -407,7 +407,7 @@ Sub-agents might receive their input wrapped in a single-element object envelope
 If the input looks like {"records": [...]} or {"rows": [...]} or {"enriched_records": [...]}, treat the inner array as your input.
 ```
 
-This is the LLM-side counterpart to the unwrap helper documented in [foundry-multi-agent/SKILL.md § Sub-Agent Contracts](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). For sub-agents without `@tool` functions, the only place to enforce the contract is the instructions text — the LLM IS the parser.
+This is the LLM-side counterpart to the unwrap helper documented in [foundry-multi-agent/SKILL.md § Sub-Agent Contracts](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). For sub-agents without `@tool` functions, the only place to enforce the contract is the instructions text — the LLM IS the parser.
 
 ✅ **Checkpoint.** Four agents, each with the right surface:
 
@@ -481,7 +481,7 @@ For each agent's `agent-status.json`, `rbac.phases_completed` should show `["pha
 
 > Wait 5–15 minutes for RBAC propagation. Especially important here — orchestrator → sibling calls fail with `401 InvalidAuthenticationToken` if propagation hasn't completed.
 
-If a sibling has its own knowledge / data source (e.g. harvester reads from AI Search), that source's RBAC must be granted to the **harvester's** SP — not the orchestrator's. See [foundry-knowledge/scripts/verify-source-rbac.sh](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/verify-source-rbac.sh).
+If a sibling has its own knowledge / data source (e.g. harvester reads from AI Search), that source's RBAC must be granted to the **harvester's** SP — not the orchestrator's. See [foundry-knowledge/scripts/verify-source-rbac.sh](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/verify-source-rbac.sh).
 
 ✅ **Checkpoint.** Every agent has its own `agent-status.json` with `identities.agent_principal_id` populated and `rbac.phases_completed: 2`. Per-source RBAC (if any) attached to the correct sibling.
 
@@ -590,7 +590,7 @@ def _invoke_sibling_stream(name: str, query: str) -> dict[str, Any]:
     return {"text": state["final_text"]}
 ```
 
-The full `_apply_sse_event` state machine (event types: `output_item.added`, `output_item.done`, `response.completed`) is in [foundry-multi-agent/SKILL.md § SSE Streaming](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). A single token (~1h validity) covers a 9-minute pipeline.
+The full `_apply_sse_event` state machine (event types: `output_item.added`, `output_item.done`, `response.completed`) is in [foundry-multi-agent/SKILL.md § SSE Streaming](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-multi-agent/SKILL.md). A single token (~1h validity) covers a 9-minute pipeline.
 
 ✅ **Checkpoint.** Pipeline with priority scorer added completes end-to-end without `httpx.ReadTimeout`. The orchestrator log shows SSE events arriving every few seconds during the 180s priority phase.
 
@@ -715,10 +715,10 @@ Each call exits 0 (clean) or 1 (drift detected with hash diff). Wire into your C
 These are decisions this recipe deliberately defers; flag them in your runbook:
 
 - **Cost.** Four hosted agents = four containers running. Right-size the sub-agent SKUs (nano + mini are much cheaper than chat / reasoning); the orchestrator is the cheapest because it does almost no LLM work — most of its time is spent waiting on siblings.
-- **SLO target shape.** End-to-end P95 ≠ sum of per-sibling P95 (siblings are sequential, not concurrent here). Define separate SLOs for orchestrator P95 and per-sibling P95. See [foundry-prod-readiness/SKILL.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-prod-readiness/SKILL.md).
+- **SLO target shape.** End-to-end P95 ≠ sum of per-sibling P95 (siblings are sequential, not concurrent here). Define separate SLOs for orchestrator P95 and per-sibling P95. See [foundry-prod-readiness/SKILL.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-prod-readiness/SKILL.md).
 - **Sibling versioning.** Each sub-agent has its own version lifecycle. Updating sentiment's instructions doesn't redeploy the orchestrator. But: schema-incompatible changes (e.g. sentiment now returns a different field name) silently break the pipeline; cover with a contract test.
 - **Pattern 2b — Parallel fan-out.** If harvester and a metadata enricher could run concurrently, the orchestrator LLM can call multiple `invoke_*` tools in one turn. The buffer pattern still applies; the contract is no harder.
-- **Pattern 2c — Hybrid.** Mixing hosted siblings with prompt sub-agents is supported — but watch for the model-mismatch trap (`SUBAGENT_MODELS` mapping must match what each sub-agent is actually deployed with). Documented in [foundry-patterns/SKILL.md § 2c](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md).
+- **Pattern 2c — Hybrid.** Mixing hosted siblings with prompt sub-agents is supported — but watch for the model-mismatch trap (`SUBAGENT_MODELS` mapping must match what each sub-agent is actually deployed with). Documented in [foundry-patterns/SKILL.md § 2c](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md).
 - **Pattern 2d — Peer-to-peer A2A.** No central orchestrator — each agent owns its routing. Out of scope here; that's a different recipe (not yet authored).
 
 ## Cleanup
@@ -737,4 +737,4 @@ done
 - Need DLP / sensitivity-label enforcement at the sibling boundary? See [03-knowledge-with-purview.md](03-knowledge-with-purview.md).
 - One of the siblings is APIM-fronted? See [05-apim-fronted-mcp.md](05-apim-fronted-mcp.md) — applies per-sibling, not just to single agents.
 - Need scheduled (regression-set) eval for the whole pipeline? See [04-ai-search-with-scheduled-eval.md](04-ai-search-with-scheduled-eval.md) and run it against the orchestrator endpoint.
-- Decomposing further into A2A peer-to-peer (Pattern 2d)? Not covered by a recipe today; see [foundry-patterns/SKILL.md § 2d](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md) for the shape.
+- Decomposing further into A2A peer-to-peer (Pattern 2d)? Not covered by a recipe today; see [foundry-patterns/SKILL.md § 2d](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-patterns/SKILL.md) for the shape.

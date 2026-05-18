@@ -294,10 +294,10 @@ What it deliberately doesn't do:
 ```diff
  dependencies:
    apm:
--    - sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-harness
-+    - sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+-    - sathik11/foundry-agent-skillpack/foundry-agent-harness
++    - sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 ```
 
-The GitHub repo name (`Foundry-Hosted-Agent-Skill`) is unchanged, so existing clone URLs, raw-file links, and PR/issue history are unaffected.
+The GitHub repo was also renamed from `Foundry-Hosted-Agent-Skill` to `foundry-agent-skillpack` in v0.20.0. GitHub auto-redirects old URLs, so existing clone URLs, raw-file links, and PR/issue history continue to work.
 
 **Close-out:** Remove the `aliases:` line from `foundry-agent-skillpack/apm.yml` in a follow-up release (slated for v0.20.x or v0.21.0; deferred past v0.20.0 so the alias survives the TD-2 + TD-10 close-out release). Bump major-or-minor per usual policy. Add a final-warning note to the release notes pointing here.

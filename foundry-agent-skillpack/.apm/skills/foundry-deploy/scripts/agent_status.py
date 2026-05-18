@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_URL = (
-    "https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/"
+    "https://github.com/sathik11/foundry-agent-skillpack/blob/main/"
     "foundry-agent-skillpack/.apm/skills/foundry-deploy/agent-status-schema.md"
 )
 SCHEMA_VERSION = 1

@@ -3,7 +3,7 @@ title: Technical debt
 description: Tracked gaps, trade-offs, and partial implementations — with rationale and close-out plan for each.
 ---
 
-The on-disk source of truth is [`TECHNICAL_DEBT.md`](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/TECHNICAL_DEBT.md) inside the engineering package. This page is the same content rendered for the docs site.
+The on-disk source of truth is [`TECHNICAL_DEBT.md`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/TECHNICAL_DEBT.md) inside the engineering package. This page is the same content rendered for the docs site.
 
 ## Open
 

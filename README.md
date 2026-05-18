@@ -6,7 +6,7 @@
 [![APM](https://img.shields.io/badge/APM-package-blue)](https://microsoft.github.io/apm/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **⚠️ v0.19.0 rename — action required by v0.20.0.** The engineering package was renamed from `foundry-agent-harness` to `foundry-agent-skillpack`. v0.19.x ships `aliases: [foundry-agent-harness]` so old `apm install` commands keep resolving for one release. Update your `apm.yml` `dependencies:` block to the new name before v0.20.0, when the alias is removed. The GitHub repo name (`Foundry-Hosted-Agent-Skill`) is **unchanged** — only the package directory renamed. See [TD-19](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack).
+> **v0.20.0 repo rename.** The GitHub repo was renamed from `Foundry-Hosted-Agent-Skill` to [`foundry-agent-skillpack`](https://github.com/sathik11/foundry-agent-skillpack) to match the primary package name. GitHub auto-redirects old URLs. The engineering package was previously renamed from `foundry-agent-harness` → `foundry-agent-skillpack` in v0.19.0; `aliases: [foundry-agent-harness]` still ships through this release (slated to drop in v0.21.0 — see [TD-19](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack)).
 
 📖 **[View the full documentation site →](https://foundry-agent-skillpack.example.com)** *(Azure Static Web Apps)*
 
@@ -16,8 +16,8 @@
 
 Two installable APM packages plus a hosted documentation site:
 
-- **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 8 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
-- **`foundry-agent-fixtures/`** — opt-in: 2 runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) and 5 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, and APIM-fronted MCP.
+- **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 9 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
+- **`foundry-agent-fixtures/`** — opt-in: 2 runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) and 6 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, APIM-fronted MCP, and multi-agent orchestration.
 - **`docs/`** — Astro Starlight site rendered to Azure Static Web Apps.
 
 ## Install
@@ -32,10 +32,10 @@ targets: [copilot, agent-skills]   # add claude / cursor / windsurf as needed
 EOF
 
 # 1. Engineering skillpack — knowledge + prompts + scripts
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 
 # 2. Optional but recommended: fixtures + recipes
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures
+apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures
 ```
 
 > **Already have `apm.yml`?** Add a `targets:` line if missing — APM CLI no longer auto-defaults to `copilot` and refuses to install without one. See [docs → Install → Troubleshooting](https://foundry-agent-skillpack.example.com/getting-started/install/#troubleshooting--no-harness-detected).
@@ -44,7 +44,7 @@ After install you'll see:
 
 ```
 .agents/skills/                    ← 16 skills (15 engineering + 1 fixtures)
-.github/prompts/                   ← 8 slash commands
+.github/prompts/                   ← 9 slash commands
 .github/agents/                    ← 1 agent persona
 ```
 
@@ -57,6 +57,8 @@ After install you'll see:
 | Apply base + capability RBAC after deploy | `/configure-rbac agent_path=agents/<name> agent_name=<name>` |
 | Smoke-test the deployed endpoint | `/verify-agent agent_name=<name> test_query="…" agent_path=agents/<name>` |
 | Schedule continuous evaluation | `/setup-evals agent_name=<name> agent_path=agents/<name>` |
+| Enable Purview middleware | `/setup-purview agent_path=agents/<name>` |
+| Publish to Teams / M365 Copilot | `/publish-teams agent_path=agents/<name> agent_name=<name>` |
 | Diagnose a failure | `/troubleshoot symptom="…"` |
 | Read-only drift reconciliation | `/audit-drift agent_path=agents/<name> agent_name=<name>` |
 
@@ -73,14 +75,14 @@ After install you'll see:
 ## Repo layout
 
 ```
-Foundry-Hosted-Agent-Skill/
+foundry-agent-skillpack/
 ├── foundry-agent-skillpack/        # Engineering package (skills + prompts + scripts)
 │   ├── apm.yml
 │   ├── README.md
 │   ├── TECHNICAL_DEBT.md
 │   └── .apm/
 │       ├── skills/               # 15 skills
-│       ├── prompts/              # 8 slash commands
+│       ├── prompts/              # 9 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
 ├── foundry-agent-fixtures/       # Fixtures + recipes (opt-in)

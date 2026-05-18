@@ -6,7 +6,7 @@ description: >
   engineering package in production do not need this.
 author: Sathik Basha
 license: MIT
-repository: https://github.com/sathik11/Foundry-Hosted-Agent-Skill
+repository: https://github.com/sathik11/foundry-agent-skillpack
 
 # APM auto-discovers .apm/* directories. We use a custom layout (.apm/fixtures/
 # and .apm/recipes/) — these are skill-target assets, not skills/prompts/agents

@@ -28,7 +28,7 @@ Every file starts with `_schema_url` and `schema_version` so consumers can valid
 
 ```json
 {
-  "_schema_url": "https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/agent-status-schema.md",
+  "_schema_url": "https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/agent-status-schema.md",
   "schema_version": 1,
   "agent_name": "feedback-harvester",
   "agent_path": "agents/feedback-harvester",

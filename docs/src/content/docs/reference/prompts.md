@@ -23,7 +23,7 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 **Steps:**
 - **Step 0a** — Target + caller-role preflight. Picklists for subscription → RG → Foundry account → project; runs `preflight-role.sh plan-agent` (Reader on RG); stamps `target:` block in `agent-capabilities.yaml`.
-- **Step 0b** — Model selection (see [foundry-deploy/model-selection.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)). List existing deployments via `mcp_azure_mcp_foundry`; user picks existing OR catalog → deploy-with-consent (`Cognitive Services Contributor` + quota check + explicit `y/N`) OR runbook. Stamps `model:` block.
+- **Step 0b** — Model selection (see [foundry-deploy/model-selection.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)). List existing deployments via `mcp_azure_mcp_foundry`; user picks existing OR catalog → deploy-with-consent (`Cognitive Services Contributor` + quota check + explicit `y/N`) OR runbook. Stamps `model:` block.
 - **Step 0c** — Track selection (A wrap / B scaffold / C prompt agent).
 - **Tracks A/B/C** generate the agent files.
 - **Step 4** — Capability interview (toolbox / knowledge / fabric / teams / guardrails / purview / evals).
@@ -41,7 +41,7 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 0. **Caller-role + target preflight (FAIL-FAST).** Reads `target:` from `agent-capabilities.yaml`; only re-elicits on missing fields. Runs `preflight-role.sh prepare-deploy` for `Contributor` on RG + `Azure AI Developer` on project.
 1. Detect agent kind (hosted vs prompt).
 2. Foundry resource validation (re-uses Step 0 target; only re-prompts for ACR on Track H).
-   - **Step 2.4** — Model deployment validation + 3-way fork on 404 (pick existing / deploy-with-consent / print runbook — same algorithm as `/plan-agent` Step 0b, see [model-selection.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)).
+   - **Step 2.4** — Model deployment validation + 3-way fork on 404 (pick existing / deploy-with-consent / print runbook — same algorithm as `/plan-agent` Step 0b, see [model-selection.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)).
    - **Step 2.5** — Read `agent-capabilities.yaml` and dispatch per-capability Phase A.
 3. `azure.yaml` validation.
 4. RBAC preflight recap (already enforced in Step 0).
@@ -119,8 +119,8 @@ Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copil
 
 **Steps:**
 0. If `m365_admin_runbook_only=true`, jump to Step 7.
-1. Detect agent object model via `mcp_foundry_mcp_agent_get`. Legacy (`identity == null`) falls back to the existing `teamsapp` runbook in [foundry-teams-workiq SKILL](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/SKILL.md).
-2. Preflight (hard gates) via [`preflight-publish.sh`](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/scripts/preflight-publish.sh): `Microsoft.BotService` RP registered, no BYO-VNet ↔ public Bot Service mismatch, continuous-eval rule present, Purview middleware enabled, publish-metadata secret scan clean.
+1. Detect agent object model via `mcp_foundry_mcp_agent_get`. Legacy (`identity == null`) falls back to the existing `teamsapp` runbook in [foundry-teams-workiq SKILL](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/SKILL.md).
+2. Preflight (hard gates) via [`preflight-publish.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/scripts/preflight-publish.sh): `Microsoft.BotService` RP registered, no BYO-VNet ↔ public Bot Service mismatch, continuous-eval rule present, Purview middleware enabled, publish-metadata secret scan clean.
 3. Patch `agent.yaml` to add `BotServiceRbac` authorization scheme + `activity_protocol.enabled: true` (idempotent YAML merge).
 4. Print the publish CLI (`azd ai agent publish …`) — operator runs it (mutating event stays operator-visible).
 5. Capture identity flip: read `identity.applicationPrincipalId` post-publish; stamp `agent-status.json` `publish` block.
@@ -130,7 +130,7 @@ Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copil
 
 **Writes:** `agent-status.json` `publish.*` (new schema v1.1 section); dispatches `/configure-rbac` for `rbac.capability_grants_post_publish.*`.
 
-**Full flow doc:** [foundry-teams-workiq/publish-flow.md](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/publish-flow.md).
+**Full flow doc:** [foundry-teams-workiq/publish-flow.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/publish-flow.md).
 
 ## /troubleshoot
 

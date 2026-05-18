@@ -51,7 +51,7 @@ Base set comes from the skillpack templates (agent-framework or LangGraph BYO). 
 | `knowledge.sources[].kind == fabric_direct_delta` | `deltalake>=0.18` |
 | `knowledge.sources[].kind == ai_search_direct` (direct SDK in your code) | `azure-search-documents>=11.5` |
 
-Full table + every capability + common-mistake matrix: [Runtime dependencies (foundry-deploy skill)](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/runtime-dependencies.md).
+Full table + every capability + common-mistake matrix: [Runtime dependencies (foundry-deploy skill)](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/runtime-dependencies.md).
 
 ### Quick check — what NOT to do
 
@@ -74,10 +74,10 @@ targets: [copilot, agent-skills]   # add claude / cursor / windsurf as needed
 EOF
 
 # 2. Engineering skillpack — knowledge + prompts + scripts
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 
 # 3. Optional but recommended: fixtures + recipes
-apm install sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-fixtures
+apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures
 ```
 
 After install you should see (depending on your `targets:`):

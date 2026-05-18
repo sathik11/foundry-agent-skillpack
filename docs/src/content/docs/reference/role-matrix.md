@@ -5,7 +5,7 @@ description: Every action the skillpack performs, with required role and scope.
 
 The full role matrix lives in the **foundry-roles** skill. This page is a quick reference; the source of truth is:
 
-[**View the full role matrix on GitHub →**](https://github.com/sathik11/Foundry-Hosted-Agent-Skill/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/role-matrix.md)
+[**View the full role matrix on GitHub →**](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/role-matrix.md)
 
 ## Five phases at a glance
 
