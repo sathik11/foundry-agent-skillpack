@@ -20,6 +20,15 @@ agents/<name>/
 schema_version: 1
 agent_kind: hosted              # hosted | prompt — must match agent.yaml
 
+# ── Operator mode (written by /plan-agent Step 0a) ───────────────────────
+# Controls whether grant scripts attempt actions directly (try-first) or
+# immediately emit runbooks without trying (preflight-only).
+# true  (default) — try the az/REST call; runbook only on 403.
+# false — emit runbook without attempting (for SOC-monitored environments
+#         where unauthorized attempts trigger security alerts).
+# See foundry-roles/operator-mode.md for the full pattern.
+operator_mode: true
+
 # ── Deployment target (written by /plan-agent Step 0a) ────────────────────
 # Source of truth for sub / RG / project across the lifecycle. /prepare-deploy
 # Step 2 reads this BEFORE prompting the user; it only re-prompts if a field

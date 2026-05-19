@@ -18,6 +18,9 @@ description: Build, deploy, and manage Foundry hosted agent versions — scaffol
 | **Pick / validate the model deployment (single source of truth for `/plan-agent` Step 0b + `/prepare-deploy` Step 2.4)** | [model-selection.md](model-selection.md) |
 | **Per-agent durable state (`agent-status.json`) — schema** | [agent-status-schema.md](agent-status-schema.md) |
 | Per-agent state helper (read/update/hash/drift) | [scripts/agent_status.py](scripts/agent_status.py) |
+| **Target discovery (account + project + ACR + model in one call)** | [scripts/discover-target.sh](scripts/discover-target.sh) |
+| **Auto-select model deployment (no interactive picklist)** | [scripts/select-model.sh](scripts/select-model.sh) |
+| **Guarded azd init (checks for .git / azure.yaml / file clobber)** | [scripts/safe-azd-init.sh](scripts/safe-azd-init.sh) |
 | Scaffold templates (agent-framework + langgraph-byo) | [templates/](templates/) |
 
 ## Cross-skill references

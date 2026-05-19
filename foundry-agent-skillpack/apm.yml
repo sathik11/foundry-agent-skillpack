@@ -1,5 +1,16 @@
 name: foundry-agent-skillpack
-version: 0.20.0
+version: 0.21.0
+# v0.21.0:
+#   - Operator mode: try-first pattern replaces persona-gated runbook-only behavior.
+#     New scripts: try-or-runbook.sh, ensure-provider-registration.sh,
+#     grant-fabric-workspace-role.sh (partial TD-1 close), rewritten grant-purview-dlp-access.sh.
+#   - Discovery scripts: discover-target.sh (account+project+ACR+model in one call),
+#     select-model.sh (auto-select when unambiguous), safe-azd-init.sh (guards against
+#     file clobber + .git reinit).
+#   - Batch preflight: preflight-roles.sh replaces N sequential preflight-role.sh calls.
+#   - Prompt fixes: /plan-agent and /prepare-deploy updated to use discovery + batch
+#     preflight scripts instead of ad-hoc MCP queries + wrong-interface script calls.
+#   - operator-mode.md concept doc under foundry-roles.
 # v0.20.0:
 #   - Closes TD-2: `/publish-teams` prompt + identity-flip handling (configure-rbac
 #     `post_publish` mode + `publish` section in agent-status schema v1.1).

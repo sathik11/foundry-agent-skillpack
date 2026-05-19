@@ -2,15 +2,18 @@
 # Grant per-agent identity the Purview roles needed by purview_dlp_middleware.py.
 # Phase B — runs ONLY after `azd up` has created the per-agent identity.
 #
-# These roles are TENANT-scoped. The caller almost always lacks the rights to
-# grant them (typically Privileged Role Administrator + Purview Admin). When
-# that's the case, the script emits a runbook block via foundry-roles for the
-# tenant admin to action.
+# Operator-mode aware (v0.21.0):
+#   OPERATOR_MODE=true  (default) → try the grant via Graph REST; runbook on 403.
+#   OPERATOR_MODE=false            → emit runbook immediately (v0.20 behavior).
+#
+# These roles are TENANT-scoped. The caller may or may not have the rights to
+# grant them. Instead of assuming they can't, we try first (when operator_mode
+# is true) and fall back to a runbook if the API returns 403.
 #
 # Usage:
 #   ./grant-purview-dlp-access.sh <agent_name>
 #
-# Required role on caller:
+# Required role on caller (if attempting grant):
 #   - Privileged Role Administrator (Entra) to grant Entra app role assignments
 #   - OR Purview Compliance Administrator (Purview tenant role)
 set -euo pipefail
@@ -35,9 +38,6 @@ if [[ -z "$CALLER_OID" ]]; then
   exit 1
 fi
 
-# Roles needed — Entra-side. Names can vary by tenant; use the canonical IDs.
-# Purview Information Protection Reader role assignment lives in Microsoft Graph;
-# we delegate to a runbook because grants here often require Privileged Role Admin.
 TENANT_ID=$(az account show --query tenantId -o tsv)
 
 echo
@@ -45,43 +45,47 @@ echo "[+] Two grants are required for the per-agent SP ($PRINCIPAL_ID):"
 echo "    1. Purview Information Protection Reader (or custom equivalent)"
 echo "    2. AIP Service Reader"
 echo
-echo "[i] Both are TENANT-scoped. Most callers lack the rights to apply these."
-echo "    Emitting runbook for the tenant administrator to action."
+
+# Resolve the SP app ID for Graph call
+SP_APP_ID=$(az ad sp show --id "$PRINCIPAL_ID" --query appId -o tsv 2>/dev/null || true)
+
+GRANT_COUNT=0
+
+# --- Grant 1: Purview Information Protection Reader ---
+echo "[+] Grant 1: Purview Information Protection Reader..." >&2
+"$ROLES_DIR/try-or-runbook.sh" \
+  --role "Purview Information Protection Reader" \
+  --scope "/tenants/$TENANT_ID" \
+  --persona "Tenant Admin" \
+  --oid "$PRINCIPAL_ID" \
+  --why "Foundry hosted agent '${AGENT_NAME}' needs to call the Purview classification API for runtime DLP enforcement. See foundry-guardrails/purview-dlp.md." \
+  --action "purview-dlp-grant" \
+  -- az rest --method POST \
+    --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PRINCIPAL_ID/appRoleAssignments" \
+    --headers "Content-Type=application/json" \
+    --body "{\"principalId\":\"$PRINCIPAL_ID\",\"resourceId\":\"$PRINCIPAL_ID\",\"appRoleId\":\"00000000-0000-0000-0000-000000000000\"}" \
+  && GRANT_COUNT=$((GRANT_COUNT + 1)) || true
+
+# --- Grant 2: AIP Service Reader ---
+echo "[+] Grant 2: AIP Service Reader..." >&2
+"$ROLES_DIR/try-or-runbook.sh" \
+  --role "AIP Service Reader" \
+  --scope "/tenants/$TENANT_ID" \
+  --persona "Tenant Admin" \
+  --oid "$PRINCIPAL_ID" \
+  --why "Foundry hosted agent '${AGENT_NAME}' needs to resolve sensitivity labels for runtime DLP enforcement. See foundry-guardrails/purview-dlp.md." \
+  --action "purview-dlp-grant" \
+  -- az rest --method POST \
+    --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PRINCIPAL_ID/appRoleAssignments" \
+    --headers "Content-Type=application/json" \
+    --body "{\"principalId\":\"$PRINCIPAL_ID\",\"resourceId\":\"$PRINCIPAL_ID\",\"appRoleId\":\"00000000-0000-0000-0000-000000000001\"}" \
+  && GRANT_COUNT=$((GRANT_COUNT + 1)) || true
+
 echo
-
-# Use the runbook emitter for both grants — paste-ready into ServiceNow/Slack.
-if [[ -x "$ROLES_DIR/runbook-emit.sh" ]]; then
-  "$ROLES_DIR/runbook-emit.sh" \
-    --action "purview-dlp-grant" \
-    --persona "Tenant Admin" \
-    --role   "Purview Information Protection Reader" \
-    --scope  "/tenants/$TENANT_ID" \
-    --oid    "$PRINCIPAL_ID" \
-    --why    "Foundry hosted agent '${AGENT_NAME}' needs to call the Purview classification API for runtime DLP enforcement. See foundry-guardrails/purview-dlp.md."
-
-  "$ROLES_DIR/runbook-emit.sh" \
-    --action "purview-dlp-grant" \
-    --persona "Tenant Admin" \
-    --role   "AIP Service Reader" \
-    --scope  "/tenants/$TENANT_ID" \
-    --oid    "$PRINCIPAL_ID" \
-    --why    "Foundry hosted agent '${AGENT_NAME}' needs to resolve sensitivity labels for runtime DLP enforcement. See foundry-guardrails/purview-dlp.md."
+if [[ $GRANT_COUNT -eq 2 ]]; then
+  echo "[✓] Both Purview DLP grants applied. Allow up to 60 min for"
+  echo "    Purview-side propagation, then run /verify-agent to confirm DLP spans."
 else
-  cat <<EOF
-
-### 🔐 Action required: purview-dlp-grant (Tenant Admin)
-
-Two role grants needed for principal $PRINCIPAL_ID in tenant $TENANT_ID:
-  1. Purview Information Protection Reader
-  2. AIP Service Reader
-
-Apply via Purview portal → Roles & scopes → Role groups; OR via Graph PowerShell.
-
-Why: agent '${AGENT_NAME}' needs runtime DLP classification.
-See foundry-guardrails/purview-dlp.md § 'Required RBAC' for context.
-
-EOF
+  echo "[!] $((2 - GRANT_COUNT)) grant(s) emitted as runbook(s). Have the tenant admin"
+  echo "    action them, then re-run /verify-agent to confirm DLP spans."
 fi
-
-echo "[+] Done emitting runbooks. Notify tenant admin; allow up to 60 min for"
-echo "    Purview-side propagation, then run /verify-agent to confirm DLP spans."

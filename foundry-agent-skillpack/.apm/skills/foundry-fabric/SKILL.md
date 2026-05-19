@@ -76,14 +76,21 @@ Run when `capabilities.fabric.enabled: true`. STOP on any ❌.
 
 Once `azd ai agent show` reports `instance_identity.principal_id`:
 
+**Operator mode (default):** Run the grant script — it tries the Fabric REST API and falls back to a runbook if the caller lacks access:
+
+```bash
+./scripts/grant-fabric-workspace-role.sh <workspace_id> <PRINCIPAL_ID> Member
 ```
-# Print these steps verbatim to the user (TD-1: API call is print-only).
+
+**Manual fallback** (if `operator_mode: false` or script unavailable):
+
+```
 Fabric portal → Workspaces → <workspace_name> → Manage access → Add people or groups
   → paste principal_id <PRINCIPAL_ID>
   → role: <role from manifest>
 ```
 
-OR via Fabric REST (requires Fabric-aud token — see TECHNICAL_DEBT.md TD-1):
+OR via Fabric REST (requires Fabric-aud token — `az login --scope https://api.fabric.microsoft.com/.default`):
 ```bash
 TOKEN=$(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
 curl -X POST "https://api.fabric.microsoft.com/v1/workspaces/<workspace_id>/roleAssignments" \

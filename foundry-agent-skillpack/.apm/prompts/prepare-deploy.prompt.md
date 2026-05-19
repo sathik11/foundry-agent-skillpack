@@ -22,13 +22,17 @@ Use the **foundry-deploy**, **foundry-identity**, and **foundry-failure-modes** 
 
 Do this **before** loading any project files — it is cheap and prevents wasting the user's time on work they can't ship.
 
-1. **Read target from manifest.** Load `${input:agent_path}/agent-capabilities.yaml`. If it has a populated `target:` block (written by `/plan-agent` Step 0a), use those values — do NOT re-prompt. If `target` is missing or has any empty field, run the same elicitation flow as `/plan-agent` Step 0a (sub picklist → RG picklist → account+project picklist) and stamp the result back into the manifest. The `${input:resource_group}` argument is an explicit override that wins over the manifest — if used, ask the user once to confirm before overwriting.
-2. **Caller role check.** Run:
+1. **Read target + operator mode from manifest.** Load `${input:agent_path}/agent-capabilities.yaml`. Read `operator_mode` (default `true` if absent) and export it as `OPERATOR_MODE` for all downstream scripts. If the manifest has a populated `target:` block (written by `/plan-agent` Step 0a), use those values — do NOT re-prompt. If `target` is missing or has any empty field, run discovery:
    ```bash
-   .agents/skills/foundry-roles/scripts/preflight-role.sh prepare-deploy \
-       <target.subscription> <target.resource_group> <target.foundry_account>
+   .agents/skills/foundry-deploy/scripts/discover-target.sh <subscription_id> <resource_group>
    ```
-   If exit non-zero, print the runbook (`runbook-emit.sh prepare-deploy ...`) and STOP. Required minimums: `Contributor` on the account RG (for `azd up`) and `Azure AI Developer` on the project (for env-var management). The Foundry MCP gates and post-deploy RBAC steps need additional roles — those are checked at Step 2.4 (model-deploy, conditional) and `/configure-rbac` (Phase 2).
+   This discovers account, project, ACR, and model in one call. Stamp results into the manifest. The `${input:resource_group}` argument is an explicit override that wins over the manifest — if used, ask the user once to confirm before overwriting.
+2. **Batch caller role check.** Run:
+   ```bash
+   .agents/skills/foundry-roles/scripts/preflight-roles.sh prepare-deploy \
+       <target.subscription> <target.resource_group> <target.foundry_account> <target.project>
+   ```
+   If exit non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key lists exactly which roles are missing. Required minimums: `Contributor` on the RG (for `azd up`) and `Azure AI Developer` on the project (for agent management).
 3. **azd + `azure.ai.agents` extension preflight.** Verify `azd` is on PATH and the agent extension is at least `0.1.27-preview`. Earlier versions (e.g. `0.1.25-preview`) use the **deprecated Azure Container Apps backend** and will fail later at Step 6's `azd up` against the current hosted-agents control plane.
    ```bash
    # azd CLI must be installed.
@@ -122,16 +126,15 @@ Validate every item below. Report a checklist (✅/❌). On any ❌, print the f
 ## Step 2 — Foundry resource validation (Azure MCP)
 Both tracks need this. **Read values from `agent-capabilities.yaml` `target:` first** — only re-prompt if a field is missing or the user explicitly asked to change something.
 
-1. **Subscription / resource group / Foundry account / project** — already established in Step 0. If for any reason a value is still missing here, run the same picklist flow (`mcp_azure_mcp_subscription_list` → `mcp_azure_mcp_group_list` → `mcp_azure_mcp_foundry` accounts.list → projects.list). **Wait for the user's explicit selection at every picklist — never auto-pick the first row, even if it's the only one.**
+1. **Subscription / resource group / Foundry account / project** — already established in Step 0 (via `discover-target.sh`). If for any reason a value is still missing, re-run discovery or use MCP picklists as fallback.
 2. **Capture the project endpoint** for use in subsequent steps.
-3. **ACR** (Track H only): list registries in the RG via `mcp_azure_mcp_acr` (or `mcp_azure_mcp_group_resource_list`). Show as picklist; **wait for selection**. Capture name. (Used only for `azure.yaml` validation in Step 3 — we do **not** build here.)
+3. **ACR** (Track H only): if `ACR_NAME` was populated by `discover-target.sh`, use it. Otherwise list registries via `mcp_azure_mcp_acr` and show a picklist. (Used only for `azure.yaml` validation in Step 3 — we do **not** build here.)
 
-### Step 2.4 — Model deployment validation + 3-way fork (REWRITTEN)
+### Step 2.4 — Model deployment validation
 
-Follow [`foundry-deploy/model-selection.md`](../skills/foundry-deploy/model-selection.md) Step 4 (validate-or-fork). Summary:
+If `MODEL_DEPLOYMENT_NAME` was already populated by `discover-target.sh` or `/plan-agent` Step 0b (via `select-model.sh`), validate it exists:
 
-1. Resolve the candidate name: `model.deployment_name` from `agent-capabilities.yaml` (Track H + Track P after `/plan-agent` Step 0b). Fall back to `MODEL_DEPLOYMENT_NAME` in `agent.yaml` env-vars (Track H legacy) or `model.name` in `agent-definition.yaml` (Track P legacy) — print a warning when falling back, since the manifest should be the source of truth post-`/plan-agent` v0.19.
-2. Call `mcp_foundry_mcp_model_deployment_get` with `subscription`, `resource-group`, `account`, `deploymentName` from `target`.
+Call `mcp_foundry_mcp_model_deployment_get` with the deployment name from the manifest.
    - **200 OK** → Cross-check `properties.model.name` against `model.catalog_name` (warn on mismatch, don't block). ✅ continue to Step 2.5.
    - **404** → Render the 3-way fork verbatim and **wait for input**:
      - **(a)** Pick a different existing deployment → jump to `model-selection.md` Step 1 (list existing). Re-stamp `model:` block. Re-enter Step 2.4 with new name.
@@ -224,15 +227,18 @@ Look for `azure.yaml` at the **repo root** (not inside the agent folder).
 
 ### If missing
 
-Tell the user:
-> No `azure.yaml` at repo root. The `azd ai agent` extension generates it on `azd init`. Run:
-> ```bash
-> azd init --template minimal
-> azd env set AZURE_TENANT_ID <tenant>
-> ```
-> Then re-run `/prepare-deploy`. Optionally I can scaffold a minimal `azure.yaml` for you now — confirm.
+Use the guarded init script:
+```bash
+.agents/skills/foundry-deploy/scripts/safe-azd-init.sh ${input:agent_path} \
+  --manifest ${input:agent_path}/agent.yaml \
+  --src ${input:agent_path} \
+  --model-deployment <MODEL_DEPLOYMENT_NAME> \
+  --protocol responses
+```
 
-If user confirms, scaffold using the template in **foundry-deploy** / `reference/SKILL.md` § "azure.yaml". Fill in: project name, location, model name + version (look up version via `az cognitiveservices account list-models`), capacity 120 GlobalStandard, `infra: { provider: bicep, path: ./infra }`. **Do not author the Bicep yourself** — the `azd ai agent` extension creates `./infra/` on first `azd up`.
+The script checks for existing `.git`, `azure.yaml`, and agent files before running `azd ai agent init`. If `SAFE_AZD_INIT=skipped` (azure.yaml already exists), continue to validation. If `SAFE_AZD_INIT=clobber-risk`, show the user the flagged files and ask for confirmation. If `SAFE_AZD_INIT=blocked`, print the recommended command and let the user run it manually.
+
+If the user prefers a manual scaffold over `azd ai agent init`, create a minimal `azure.yaml` using the template in **foundry-deploy** / `reference/SKILL.md` § "azure.yaml". Fill in: project name, location, model name + version, capacity 120 GlobalStandard, `infra: { provider: bicep, path: ./infra }`. **Do not author the Bicep yourself** — the `azd ai agent` extension creates `./infra/` on first `azd up`.
 
 ### If present
 

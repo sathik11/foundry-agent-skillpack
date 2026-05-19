@@ -18,7 +18,9 @@ Use **foundry-identity** (base matrix) + capability-aware grants from **foundry-
 
 > **`post_publish` mode (TD-2).** When invoked with `post_publish=true` (typically by `/publish-teams` after a Teams / M365 Copilot publish flipped the runtime identity), this prompt SKIPS Steps 1–2 and re-runs Step 3 with the **application identity** (Bot Framework app principal) as the target instead of the per-agent project identity. The pre-publish `rbac.capability_grants` entries are preserved for audit; the new grants are written under `rbac.capability_grants_post_publish`. Stamps `publish.rbac_refanned_at` on success. See [foundry-teams-workiq/publish-flow.md § Step 6 — Post-publish RBAC re-fan](../skills/foundry-teams-workiq/publish-flow.md#step-6--post-publish-rbac-re-fan).
 
-## Step 0 — Discover (Azure MCP)
+## Step 0 — Discover + operator mode (Azure MCP)
+
+Read `operator_mode` from `${input:agent_path}/agent-capabilities.yaml` (default `true` if absent). Export as `OPERATOR_MODE` for all downstream grant scripts — this controls whether they attempt the action (try-first) or immediately emit a runbook.
 
 Discover any inputs not provided: subscription, RG, Foundry account/project, ACR, Content Safety resource (if guardrails declared). Use the same discovery pattern as `/prepare-deploy` Step 0.
 

@@ -11,29 +11,47 @@ You are a Foundry Agent Engineer. Use the **foundry-patterns** skill.
 
 > **Anti-synthesis guard.** For Steps 0a and 0b you MUST gather facts via the listed MCP tools. Do NOT shell out (`az`, `curl`, `python -c`), and do NOT echo example values from other skills, recipes, or fixture READMEs. Treat every value the user has not explicitly confirmed as unknown.
 
-## Step 0a — Target + caller-role preflight (NEW)
+## Step 0a — Target discovery + caller-role preflight
 
-Before touching any files, establish the deployment target and confirm the caller has the rights to plan.
+Before touching any files, discover the deployment target and confirm the caller has the rights to plan.
 
 1. **Subscription.** If the user did not pass `subscription=`, list subscriptions with `mcp_azure_mcp_subscription_list` and show a numbered picklist. **Wait for the user's selection.** Never auto-pick.
 2. **Resource group.** Run `mcp_azure_mcp_group_list subscription=<sub>` and show a numbered picklist scoped to the chosen subscription. **Wait for selection.** If the user types a name that is not in the list, do NOT silently create it — ask for confirmation.
-3. **Foundry account + project.** Run `mcp_azure_mcp_foundry` (action: `accounts.list`, scope `subscription` + `resource-group`). For the chosen account, list its projects. Render both as picklists; **wait** for both selections.
-4. **Caller role check.** Run `.agents/skills/foundry-roles/scripts/preflight-role.sh plan-agent <subscription> <resource-group> <foundry-account>`. If it exits non-zero, print the runbook (`.agents/skills/foundry-roles/scripts/runbook-emit.sh plan-agent ...`) and STOP — the user must obtain `Reader` on the RG (and `Azure AI User` on the project to read its connections) before re-running.
-5. **Stamp the manifest.** Create `agents/${input:agent_name}/agent-capabilities.yaml` if it does not exist, then write the `target:` block exactly as captured above. This file is the single source of truth for sub/RG/project across the whole lifecycle — `/prepare-deploy` reads it and only re-prompts on missing fields.
+3. **Discover all target resources in one call.** Run:
+   ```bash
+   .agents/skills/foundry-deploy/scripts/discover-target.sh <subscription_id> <resource_group>
+   ```
+   This discovers the Foundry account, project, ACR, and model deployments — all as KEY=VALUE pairs. If `DISCOVERY_STATUS=partial`, show the user what's missing and ask how to proceed. If multiple accounts/projects exist, the script lists all and picks the first — confirm with the user.
+4. **Batch role check.** Run:
+   ```bash
+   .agents/skills/foundry-roles/scripts/preflight-roles.sh plan-agent <subscription_id> <resource_group> <foundry_account> <project>
+   ```
+   If it exits non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key tells you exactly which roles are missing.
+5. **Stamp the manifest.** Create `agents/${input:agent_name}/agent-capabilities.yaml` if it does not exist, then write:
+   - `operator_mode: true` — at the top of the file, before `target:`. This enables the try-first pattern across all lifecycle prompts. The user can override to `false` for SOC-monitored environments (see [`foundry-roles/operator-mode.md`](../skills/foundry-roles/operator-mode.md)).
+   - `target:` block from the discovered values. This file is the single source of truth for sub/RG/project across the whole lifecycle — `/prepare-deploy` reads it and only re-prompts on missing fields.
 
-✅ **Checkpoint.** `agent-capabilities.yaml` exists with a populated `target:` block. The user has confirmed every value verbatim.
+✅ **Checkpoint.** `agent-capabilities.yaml` exists with a populated `target:` block. The user has confirmed the discovered values.
 
-## Step 0b — Model selection (NEW)
+## Step 0b — Model selection
 
-Follow [`foundry-deploy/model-selection.md`](../skills/foundry-deploy/model-selection.md) end-to-end. Summary of forks:
+Auto-select the model deployment. Run:
 
-- List existing deployments in `target.foundry_account` via `mcp_azure_mcp_foundry` — show as picklist.
-- If user picks an existing one → write `model:` block, done.
-- If user picks "deploy new" → list catalog via `mcp_foundry_mcp_model_catalog_list`, then enter the validate-or-fork (Step 4 of model-selection.md): pick / deploy-with-consent (gated by `Cognitive Services Contributor` + quota check + explicit `y/N`) / print runbook.
+```bash
+.agents/skills/foundry-deploy/scripts/select-model.sh <subscription_id> <resource_group> <foundry_account> [<deployment_name_hint>]
+```
 
-Write the resulting `model:` block to the same `agent-capabilities.yaml`.
+The script auto-selects when unambiguous:
+- If a hint is given and exists → uses it.
+- If only one deployment exists → uses it.
+- If multiple exist → picks the first agents-capable one.
+- Only when `MODEL_SELECTION_METHOD=manual-needed` do you need to ask the user to choose.
 
-✅ **Checkpoint.** `model.deployment_name` is populated and verified to exist (HTTP 200 from `mcp_foundry_mcp_model_deployment_get`). Templates in Track B will substitute it for `${MODEL_DEPLOYMENT_NAME}`.
+Write the resulting `model:` block to `agent-capabilities.yaml` using the `MODEL_DEPLOYMENT_NAME`, `MODEL_NAME`, and `MODEL_VERSION` output.
+
+If no deployments exist at all, fall back to the full model-selection flow in [`foundry-deploy/model-selection.md`](../skills/foundry-deploy/model-selection.md): catalog browse → deploy-with-consent (gated by `Cognitive Services Contributor` + quota check + explicit `y/N`) → runbook.
+
+✅ **Checkpoint.** `model.deployment_name` is populated. Templates in Track B will substitute it for `${MODEL_DEPLOYMENT_NAME}`.
 
 ## Step 0c — Fork: existing code or scaffold new?
 
