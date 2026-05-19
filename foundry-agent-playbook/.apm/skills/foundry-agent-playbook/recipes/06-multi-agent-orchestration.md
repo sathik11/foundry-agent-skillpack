@@ -12,7 +12,7 @@ prerequisites:
 
 # Recipe 06 — Multi-Agent Orchestration with Data Buffer + SSE Streaming
 
-> **👋 Brand new to Foundry?** This recipe assumes you've already deployed at least one working hosted agent — its prerequisites build on the lifecycle (`/plan-agent` → `/prepare-deploy` → `azd up` → `/configure-rbac` → `/verify-agent`) that Recipe 01 walks you through end-to-end. If you've never deployed a Foundry hosted agent before, **start with [Recipe 01 — Greenfield quickstart](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)** (~30 min) and come back here after.
+> **👋 Brand new to Foundry?** This recipe assumes you've already deployed at least one working hosted agent — its prerequisites build on the lifecycle (`/plan-agent` → `/prepare-deploy` → `azd up` → `/configure-rbac` → `/verify-agent`) that Recipe 01 walks you through end-to-end. If you've never deployed a Foundry hosted agent before, **start with [Recipe 01 — Greenfield quickstart](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md)** (~30 min) and come back here after.
 
 > **Goal:** Decompose a single agent that is hitting a wall (latency, scope creep, model right-sizing) into an orchestrator + N sibling sub-agents, using the inter-tool **data buffer** pattern to bypass the LLM serialization bottleneck and SSE streaming to survive long pipelines. End state: 9-minute end-to-end pipeline with per-sub-agent OTel spans, per-sub-agent continuous eval, and orchestrator + sibling identities/RBAC graduated to production-shape.
 
@@ -84,7 +84,7 @@ Pipeline budget: ~4 minutes. We'll add a 4th sub-agent (priority scorer, reasoni
 
 ### Why we ship a synthetic fixture
 
-A multi-agent recipe is only useful if you can actually *run* it. To avoid making you stand up a CRM, AI Search index, or Fabric workspace just to learn the pattern, the fixtures package ships a **synthetic feedback dataset** — 30 anonymised records (12 positive, 10 negative, 8 neutral) across `support_ticket / app_review / twitter / email_survey` channels for a hypothetical SaaS product. The harvester reads from this fixture; the other siblings see whatever the harvester returns.
+A multi-agent recipe is only useful if you can actually *run* it. To avoid making you stand up a CRM, AI Search index, or Fabric workspace just to learn the pattern, the playbook package ships a **synthetic feedback dataset** — 30 anonymised records (12 positive, 10 negative, 8 neutral) across `support_ticket / app_review / twitter / email_survey` channels for a hypothetical SaaS product. The harvester reads from this fixture; the other siblings see whatever the harvester returns.
 
 When you're done validating the pattern, swap the harvester's data source for your real one — Step 3 has the explicit swap point flagged. The orchestrator, sentiment, narrator, identity/RBAC/OTel/eval wiring all stay identical.
 
@@ -96,11 +96,11 @@ Copy the shipped fixture into the harvester's container:
 
 ```bash
 mkdir -p agents/feedback-harvester/fixture
-cp .agents/skills/foundry-agent-fixtures/fixtures/feedback-fixture.json \
+cp .agents/skills/foundry-agent-playbook/fixtures/feedback-fixture.json \
    agents/feedback-harvester/fixture/feedback.json
 ```
 
-(`.agents/skills/foundry-agent-fixtures/` is where APM installs the fixtures package; if you're scripting around this, the source path inside the repo is `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/fixtures/feedback-fixture.json`.)
+(`.agents/skills/foundry-agent-playbook/` is where APM installs the playbook package; if you're scripting around this, the source path inside the repo is `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/fixtures/feedback-fixture.json`.)
 
 Sanity-check the fixture:
 
@@ -434,7 +434,7 @@ print(f'OK — {len(records)} records, first id: {records[0][\"id\"]}, last id: 
 # Expected: OK — 30 records, first id: fb-001, last id: fb-030
 ```
 
-If you see `FileNotFoundError`, your fixture path is wrong — revisit Step 0. If you see `JSONDecodeError`, the fixture file got mangled (probably during copy/paste in Step 0) — re-copy from `.agents/skills/foundry-agent-fixtures/fixtures/feedback-fixture.json`.
+If you see `FileNotFoundError`, your fixture path is wrong — revisit Step 0. If you see `JSONDecodeError`, the fixture file got mangled (probably during copy/paste in Step 0) — re-copy from `.agents/skills/foundry-agent-playbook/fixtures/feedback-fixture.json`.
 
 ---
 

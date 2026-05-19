@@ -5,13 +5,13 @@ description: Onboard existing Python agent code onto Foundry without breaking wh
 
 You have working Python agent code on your laptop. The skillpack scans it, derives a capability manifest, applies RBAC, deploys, verifies, and sets a drift baseline. Your code does not need to move into the skillpack's templates — it stays the source of truth.
 
-The full step-by-step lives in **Recipe 02** inside the fixtures package:
+The full step-by-step lives in **Recipe 02** inside the playbook package:
 
 ```bash
-.agents/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md
+.agents/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md
 ```
 
-[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md)
+[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md)
 
 ## What's different from greenfield
 

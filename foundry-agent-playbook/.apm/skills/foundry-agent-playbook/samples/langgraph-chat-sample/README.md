@@ -1,4 +1,4 @@
-# langgraph-chat-fixture
+# langgraph-chat-sample
 
 > Clean, deploys-cleanly LangGraph BYO hosted agent. Companion to `learn-agent`
 > (which is deliberately flawed to exercise gate failures).
@@ -28,13 +28,13 @@ To extend, see [foundry-deploy/capabilities-manifest.md](../../../../../foundry-
 Copy this folder into your test workspace, then from your workspace root:
 
 ```bash
-cp -r .agents/skills/foundry-agent-fixtures/fixtures/langgraph-chat-fixture agents/langgraph-chat-fixture
+cp -r .agents/skills/foundry-agent-playbook/samples/langgraph-chat-sample agents/langgraph-chat-sample
 
-/prepare-deploy agent_path=agents/langgraph-chat-fixture
+/prepare-deploy agent_path=agents/langgraph-chat-sample
 azd up
-/configure-rbac agent_path=agents/langgraph-chat-fixture agent_name=langgraph-chat-fixture
-/verify-agent agent_name=langgraph-chat-fixture test_query="What time is it?" agent_path=agents/langgraph-chat-fixture
-/setup-evals agent_name=langgraph-chat-fixture agent_path=agents/langgraph-chat-fixture
+/configure-rbac agent_path=agents/langgraph-chat-sample agent_name=langgraph-chat-sample
+/verify-agent agent_name=langgraph-chat-sample test_query="What time is it?" agent_path=agents/langgraph-chat-sample
+/setup-evals agent_name=langgraph-chat-sample agent_path=agents/langgraph-chat-sample
 ```
 
 ## Expected output
@@ -42,7 +42,7 @@ azd up
 After `/verify-agent`:
 
 ```
-Agent:        langgraph-chat-fixture
+Agent:        langgraph-chat-sample
 Kind:         Hosted (container)
 Endpoint:     ✅
 Model:        ✅
@@ -55,7 +55,7 @@ After `/setup-evals` (dry-run):
 
 ```
 Plan:
-  rule_name:        continuous-eval-langgraph-chat-fixture
+  rule_name:        continuous-eval-langgraph-chat-sample
   sample_rate:      1.0
   evaluators:       relevance, task_adherence, indirect_attack
   judge_model:      gpt-4.1-mini

@@ -1,6 +1,6 @@
 ---
 name: foundry-skillpack-builder
-description: 'Context loader for maintainers fixing bugs / triaging issues in THIS repo (the foundry-agent-skillpack APM monorepo that ships `foundry-agent-skillpack` + `foundry-agent-fixtures`). USE WHEN: a bug is reported against the skillpack, a recipe is broken, a prompt or skill misbehaves on a consumer install, a script under `.apm/skills/*/scripts/` errors, docs site drift is reported, TECHNICAL_DEBT entry needs work, or a roadmap item starts. Sets up source-of-truth boundaries (`.apm/` vs installed `.agents/` + `.github/` copies), maps symptom → likely owning skill/prompt/script, and runs the local install verification loop. DO NOT USE FOR: building or deploying a Foundry agent end-to-end (that is what consumers do via the slash commands — use `foundry-engineer` agent or the shipped prompts). DO NOT USE FOR: docs-site authoring outside drift triage (edit `docs/src/content/docs/` directly).'
+description: 'Context loader for maintainers fixing bugs / triaging issues in THIS repo (the foundry-agent-skillpack APM monorepo that ships `foundry-agent-skillpack` + `foundry-agent-playbook`). USE WHEN: a bug is reported against the skillpack, a recipe is broken, a prompt or skill misbehaves on a consumer install, a script under `.apm/skills/*/scripts/` errors, docs site drift is reported, TECHNICAL_DEBT entry needs work, or a roadmap item starts. Sets up source-of-truth boundaries (`.apm/` vs installed `.agents/` + `.github/` copies), maps symptom → likely owning skill/prompt/script, and runs the local install verification loop. DO NOT USE FOR: building or deploying a Foundry agent end-to-end (that is what consumers do via the slash commands — use `foundry-engineer` agent or the shipped prompts). DO NOT USE FOR: docs-site authoring outside drift triage (edit `docs/src/content/docs/` directly).'
 ---
 
 # Foundry Skillpack Builder
@@ -9,10 +9,10 @@ Context bootstrap for maintainers of the **foundry-agent-skillpack** monorepo. L
 
 ## When to load this skill
 
-- A user filed an issue / regression against `foundry-agent-skillpack` or `foundry-agent-fixtures`.
+- A user filed an issue / regression against `foundry-agent-skillpack` or `foundry-agent-playbook`.
 - A consumer reports `apm install` ships wrong files, or a slash command fails.
 - A vendored script (`*.py`, `*.sh`, `*.kql`) under a skill's `scripts/` folder is broken.
-- A recipe under `foundry-agent-fixtures` no longer matches reality.
+- A recipe under `foundry-agent-playbook` no longer matches reality.
 - The docs drift checker (`docs/scripts/check-drift.mjs`) flags missing skill / prompt / TD coverage.
 - You are starting work on a `TD-N` entry from [TECHNICAL_DEBT.md](../../../foundry-agent-skillpack/TECHNICAL_DEBT.md) or a [ROADMAP.md](../../../ROADMAP.md) item.
 - You need to add a new skill, prompt, or vendored script.
@@ -22,7 +22,7 @@ Context bootstrap for maintainers of the **foundry-agent-skillpack** monorepo. L
 | Path | Status | Edit? |
 |---|---|---|
 | `foundry-agent-skillpack/.apm/{skills,prompts,agents,instructions}/` | **SOURCE OF TRUTH** | ✅ Yes — author here |
-| `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/{fixtures,recipes}/` | **SOURCE OF TRUTH** | ✅ Yes — author here |
+| `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/{fixtures,recipes}/` | **SOURCE OF TRUTH** | ✅ Yes — author here |
 | `.agents/skills/foundry-*` (repo root) | **APM-installed copy** | ❌ Never — regenerated on `apm install` |
 | `.github/{prompts,agents}/` (repo root) | **APM-installed copy** | ❌ Never — regenerated on `apm install` |
 | `docs/src/content/docs/` | Hand-curated subset (recipes auto-mirrored) | ✅ Yes — for site-only edits |
@@ -54,11 +54,11 @@ foundry-agent-skillpack/                  ← monorepo (this repo)
 │       ├── agents/foundry-engineer.agent.md
 │       └── instructions/foundry-conventions.md
 │
-├── foundry-agent-fixtures/                  ← PACKAGE 2 — recipes + fixtures (opt-in)
+├── foundry-agent-playbook/                  ← PACKAGE 2 — recipes + fixtures (opt-in)
 │   ├── apm.yml
 │   ├── README.md
-│   └── .apm/skills/foundry-agent-fixtures/
-│       ├── fixtures/{learn-agent,langgraph-chat-fixture}/
+│   └── .apm/skills/foundry-agent-playbook/
+│       ├── samples/{learn-agent,langgraph-chat-sample}/
 │       └── recipes/0{1..6}-*.md
 │
 ├── docs/                                    ← Astro Starlight site → Azure SWA
@@ -85,8 +85,8 @@ When a bug is reported, jump to the owning area first.
 | Per-agent durable state corrupt | `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/agent_status.py` + `agent-status-schema.md` |
 | Brownfield code scan miss | `foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/scan_knowledge_refs.py` (TD-13 — regex-only by design) |
 | Capability manifest ↔ live world drift report wrong | `foundry-agent-skillpack/.apm/prompts/audit-drift.prompt.md` (no scripts; pure prompt) |
-| Recipe instructions stale | `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/0{1..6}-*.md` — bump `validity_date` after fix |
-| Fixture (`learn-agent` / `langgraph-chat-fixture`) won't deploy | `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/fixtures/<name>/` |
+| Recipe instructions stale | `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/0{1..6}-*.md` — bump `validity_date` after fix |
+| Sample (`learn-agent` / `langgraph-chat-sample`) won't deploy | `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/samples/<name>/` |
 | Docs site missing a skill / prompt / TD | run `node docs/scripts/check-drift.mjs` (TD-17 Phase 1); fix in `docs/src/content/docs/` |
 | Coding-convention question (SDK pin, env-var prefix, deploy boundary) | `foundry-agent-skillpack/.apm/instructions/foundry-conventions.md` |
 
@@ -109,7 +109,7 @@ These are non-negotiable boundaries — a bug fix that crosses any of these is t
 
 ### 1. Reproduce against the source-of-truth files
 - Read the issue. Identify the symptom from the [Symptom → likely owner](#symptom--likely-owner) table.
-- Open the matching file under `foundry-agent-skillpack/.apm/` or `foundry-agent-fixtures/.apm/`. **Do not** open the same-named file under `.agents/` / `.github/` at the repo root — that is the regenerated copy.
+- Open the matching file under `foundry-agent-skillpack/.apm/` or `foundry-agent-playbook/.apm/`. **Do not** open the same-named file under `.agents/` / `.github/` at the repo root — that is the regenerated copy.
 
 ### 2. Cross-check related context
 - Skill-level context: read the owning skill's `SKILL.md` + any sub-doc the prompt or script references.
@@ -141,14 +141,14 @@ EOF
 
 # Install the skillpack from your local working tree
 apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
-# Optional — fixtures + recipes
-apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures
+# Optional — playbook (samples + recipes)
+apm install /path/to/foundry-agent-skillpack/foundry-agent-playbook
 
 find . -maxdepth 4 -not -path '*/apm_modules/*' | sort
 ```
 
 Expected shape after install:
-- `.agents/skills/` — 15 directories from skillpack (+ `foundry-agent-fixtures/` if installed).
+- `.agents/skills/` — 15 directories from skillpack (+ `foundry-agent-playbook/` if installed).
 - `.github/prompts/` — 9 `*.prompt.md`.
 - `.github/agents/` — `foundry-engineer.agent.md`.
 
@@ -185,7 +185,7 @@ Both packages version independently. Bumping fixtures rarely requires bumping th
 - [foundry-agent-skillpack/TECHNICAL_DEBT.md](../../../foundry-agent-skillpack/TECHNICAL_DEBT.md) — TD-1..TD-17
 - [foundry-agent-skillpack/.apm/instructions/foundry-conventions.md](../../../foundry-agent-skillpack/.apm/instructions/foundry-conventions.md) — SDK pins, env-var rules, deploy boundary
 - [foundry-agent-skillpack/.apm/agents/foundry-engineer.agent.md](../../../foundry-agent-skillpack/.apm/agents/foundry-engineer.agent.md) — the consumer-facing persona
-- [foundry-agent-fixtures/README.md](../../../foundry-agent-fixtures/README.md) — fixtures + recipes overview
+- [foundry-agent-playbook/README.md](../../../foundry-agent-playbook/README.md) — playbook (samples + recipes) overview
 - [ROADMAP.md](../../../ROADMAP.md) — release sequencing
 - [TESTING.md](../../../TESTING.md) — install verification
 - [TESTING_SCENARIOS.md](../../../TESTING_SCENARIOS.md) — scenario matrix

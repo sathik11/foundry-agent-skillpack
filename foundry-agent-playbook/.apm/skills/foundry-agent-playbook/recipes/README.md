@@ -42,7 +42,7 @@ End-to-end walkthroughs that combine the agent runtime with tools/knowledge and 
 
 | # | Recipe | Starting point | Surfaces touched | Fixture? | Validity |
 |---|---|---|---|---|---|
-| 01 | [Greenfield quickstart](01-greenfield-quickstart.md) | Nothing | agent-framework + Microsoft Learn MCP + middleware guardrails + continuous eval | uses `learn-agent` (after fix-up) OR `langgraph-chat-fixture` | 2026-05-14 |
+| 01 | [Greenfield quickstart](01-greenfield-quickstart.md) | Nothing | agent-framework + Microsoft Learn MCP + middleware guardrails + continuous eval | uses `learn-agent` (after fix-up) OR `langgraph-chat-sample` | 2026-05-14 |
 | 02 | [Brownfield onboarding](02-brownfield-onboarding.md) | Existing Python agent code | Code-scan + manifest derivation + per-skill gate dispatch | bring-your-own | 2026-05-14 |
 | 03 | [Knowledge agent with Purview audit](03-knowledge-with-purview.md) | Have a Foundry IQ knowledge base OR can create one | agent + Foundry IQ KB MCP + Content Safety + Purview audit toggle | recipe only | 2026-05-14 |
 | 04 | [AI Search direct + scheduled eval](04-ai-search-with-scheduled-eval.md) | Have an AI Search index OR can create one | agent + AI Search direct (managed identity) + scheduled eval gating publish | recipe only | 2026-05-14 |
@@ -77,7 +77,7 @@ Network is intentionally not woven into the recipes because the failure modes ar
 
 ## What every recipe assumes
 
-- You've installed both packages: `foundry-agent-skillpack` + `foundry-agent-fixtures`.
+- You've installed both packages: `foundry-agent-skillpack` + `foundry-agent-playbook`.
 - You have `azd ≥ 1.24` with the `azure.ai.agents` extension installed.
 - You have an Azure subscription with a Foundry project.
 - You're logged in: `az login` and `azd auth login`.

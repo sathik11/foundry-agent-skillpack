@@ -31,7 +31,7 @@ description: Agent pattern catalog and decision tree for Microsoft Foundry — h
 - **2e — Event-Driven**: Schedule/webhook/eventstream triggers. ACA cron → agent endpoint.
 
 For 2a/2b/2c implementation mechanics — sub-agent invocation URL, retry, three-tier response extraction, the **inter-tool data buffer** (LLM serialization bypass for >25 records / >20KB), and SSE streaming for >120s pipelines — use the **foundry-multi-agent** skill.
-For an end-to-end walkthrough (orchestrator + 3 siblings + per-sibling identity, RBAC, OTel, eval) see [Recipe 06 — Multi-Agent Orchestration](../../../../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/06-multi-agent-orchestration.md).
+For an end-to-end walkthrough (orchestrator + 3 siblings + per-sibling identity, RBAC, OTel, eval) see [Recipe 06 — Multi-Agent Orchestration](../../../../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/06-multi-agent-orchestration.md).
 
 ## Decision Tree
 

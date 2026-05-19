@@ -27,11 +27,11 @@ foundry-agent-skillpack/
 │       ├── prompts/              # 9 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
-├── foundry-agent-fixtures/       # Fixtures + recipes (opt-in)
+├── foundry-agent-playbook/       # Fixtures + recipes (opt-in)
 │   ├── apm.yml
 │   ├── README.md
-│   └── .apm/skills/foundry-agent-fixtures/
-│       ├── fixtures/             # learn-agent, langgraph-chat-fixture
+│   └── .apm/skills/foundry-agent-playbook/
+│       ├── samples/             # learn-agent, langgraph-chat-sample
 │       └── recipes/              # 6 end-to-end walkthroughs
 ├── docs/                         # This Astro Starlight site
 ├── ROADMAP.md
@@ -74,16 +74,16 @@ Reference scripts from the matching `SKILL.md` / sub-doc using a relative link.
 
 ## Adding a recipe
 
-Recipes live in `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/`. Conventions:
+Recipes live in `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/`. Conventions:
 
 - Frontmatter must include `validity_date`, `audience`, `duration`, `surfaces` (list), `prerequisites` (list).
 - Must touch **3 surfaces minimum**: agent runtime + tools/knowledge + at least one outer-loop concern (guardrails / eval / red-team / Purview).
-- Numbered: `<NN>-<short-name>.md`. Add to the [recipes README](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/README.md) table.
+- Numbered: `<NN>-<short-name>.md`. Add to the [recipes README](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/README.md) table.
 - Add to the [Recipes overview](/recipes/) page in this site.
 
 ## Adding a fixture
 
-Fixtures live in `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/fixtures/`. Each is a complete `agents/<name>/` folder (Dockerfile, agent.yaml, agent-capabilities.yaml, main.py, requirements.txt, README.md).
+Fixtures live in `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/fixtures/`. Each is a complete `agents/<name>/` folder (Dockerfile, agent.yaml, agent-capabilities.yaml, main.py, requirements.txt, README.md).
 
 - **Clean fixtures** (intended to deploy successfully) demonstrate happy paths for templates / capabilities.
 - **Flawed fixtures** (intended to fail specific gates) demonstrate the skillpack catching errors. `learn-agent` is the canonical flawed fixture.
@@ -100,7 +100,7 @@ version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
 apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
-apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures
+apm install /path/to/foundry-agent-skillpack/foundry-agent-playbook
 
 # Verify expected counts
 ls .agents/skills | wc -l            # → 16

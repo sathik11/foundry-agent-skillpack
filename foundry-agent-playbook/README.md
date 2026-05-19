@@ -1,4 +1,4 @@
-# foundry-agent-fixtures
+# foundry-agent-playbook
 
 > Runnable fixtures and end-to-end recipes for [foundry-agent-skillpack](../foundry-agent-skillpack). **Opt-in.** You don't need this in production.
 
@@ -27,16 +27,16 @@ targets: [copilot, agent-skills]
 EOF
 
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
-apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures   # this package
+apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook   # this package
 ```
 
 After install you'll see (under `agent-skills` target → `.agents/skills/`):
 
 ```
-.agents/skills/foundry-agent-fixtures/
+.agents/skills/foundry-agent-playbook/
 ├── fixtures/
 │   ├── learn-agent/                    ← deliberately flawed agent-framework fixture
-│   └── langgraph-chat-fixture/         ← clean LangGraph BYO fixture
+│   └── langgraph-chat-sample/         ← clean LangGraph BYO fixture
 └── recipes/
     ├── README.md                        ← index of recipes
     ├── 01-greenfield-quickstart.md
@@ -52,9 +52,9 @@ After install you'll see (under `agent-skills` target → `.agents/skills/`):
 
 | You are… | Read |
 |---|---|
-| New to Foundry hosted agents — building from scratch | [recipes/01-greenfield-quickstart.md](.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md) |
-| Already have working agent code, want to host it on Foundry | [recipes/02-brownfield-onboarding.md](.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md) |
-| Want to validate the package end-to-end against a real Foundry project | [recipes/README.md](.apm/skills/foundry-agent-fixtures/recipes/README.md) |
+| New to Foundry hosted agents — building from scratch | [recipes/01-greenfield-quickstart.md](.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md) |
+| Already have working agent code, want to host it on Foundry | [recipes/02-brownfield-onboarding.md](.apm/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md) |
+| Want to validate the package end-to-end against a real Foundry project | [recipes/README.md](.apm/skills/foundry-agent-playbook/recipes/README.md) |
 | Just want to smoke-test that `apm install` works | [TESTING.md](../TESTING.md) at the repo root |
 
 ## Maintenance posture

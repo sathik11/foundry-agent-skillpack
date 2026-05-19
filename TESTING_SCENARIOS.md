@@ -1,13 +1,13 @@
 # Testing Scenarios
 
-End-to-end agent recipes for the Foundry hosted-agent skillpack. **Recipes live in the [foundry-agent-fixtures](foundry-agent-fixtures/) package** — install it to get them locally:
+End-to-end agent recipes for the Foundry hosted-agent skillpack. **Recipes live in the [foundry-agent-playbook](foundry-agent-playbook/) package** — install it to get them locally:
 
 ```bash
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
-apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures   # ← brings recipes + fixtures
+apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook   # ← brings recipes + fixtures
 ```
 
-After install, the recipe files land at `.agents/skills/foundry-agent-fixtures/recipes/`.
+After install, the recipe files land at `.agents/skills/foundry-agent-playbook/recipes/`.
 
 ## Decision tree
 
@@ -38,11 +38,11 @@ After install, the recipe files land at `.agents/skills/foundry-agent-fixtures/r
 
 | # | Recipe | Surfaces touched | Fixture? |
 |---|---|---|---|
-| 01 | [Greenfield quickstart](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md) | agent + MCP + middleware guardrails + continuous eval | uses `learn-agent` (after fix-up) OR `langgraph-chat-fixture` |
-| 02 | [Brownfield onboarding](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md) | code-scan + manifest derivation + RBAC verify + drift baseline | bring-your-own |
-| 03 | [Knowledge agent with Purview audit](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/03-knowledge-with-purview.md) | agent + Foundry IQ KB MCP + Content Safety + Purview audit | recipe only |
-| 04 | [AI Search direct + scheduled eval](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/04-ai-search-with-scheduled-eval.md) | agent + AI Search direct (managed-identity) + scheduled eval gate | recipe only |
-| 05 | [APIM-fronted MCP + RBAC + Drift](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/05-apim-fronted-mcp.md) | agent + APIM AI Gateway + per-source RBAC verify + drift baseline | recipe only |
+| 01 | [Greenfield quickstart](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md) | agent + MCP + middleware guardrails + continuous eval | uses `learn-agent` (after fix-up) OR `langgraph-chat-sample` |
+| 02 | [Brownfield onboarding](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md) | code-scan + manifest derivation + RBAC verify + drift baseline | bring-your-own |
+| 03 | [Knowledge agent with Purview audit](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/03-knowledge-with-purview.md) | agent + Foundry IQ KB MCP + Content Safety + Purview audit | recipe only |
+| 04 | [AI Search direct + scheduled eval](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/04-ai-search-with-scheduled-eval.md) | agent + AI Search direct (managed-identity) + scheduled eval gate | recipe only |
+| 05 | [APIM-fronted MCP + RBAC + Drift](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/05-apim-fronted-mcp.md) | agent + APIM AI Gateway + per-source RBAC verify + drift baseline | recipe only |
 
 ## What every scenario assumes
 

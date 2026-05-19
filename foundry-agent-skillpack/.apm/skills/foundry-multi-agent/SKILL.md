@@ -5,7 +5,7 @@ description: Multi-agent orchestration patterns — sibling calls, data buffer, 
 
 # Foundry Multi-Agent Orchestration
 
-> **When to use this skill.** You've already chosen a multi-agent pattern (2a–2e) via [foundry-patterns](../foundry-patterns/SKILL.md) and need the implementation mechanics. For an end-to-end walkthrough that wires all of this together (4 agents, per-sibling identity / RBAC / OTel / eval, drift baseline) see [Recipe 06 — Multi-Agent Orchestration](../../../../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/06-multi-agent-orchestration.md).
+> **When to use this skill.** You've already chosen a multi-agent pattern (2a–2e) via [foundry-patterns](../foundry-patterns/SKILL.md) and need the implementation mechanics. For an end-to-end walkthrough that wires all of this together (4 agents, per-sibling identity / RBAC / OTel / eval, drift baseline) see [Recipe 06 — Multi-Agent Orchestration](../../../../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/06-multi-agent-orchestration.md).
 
 ## The Core Problem
 

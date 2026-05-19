@@ -11,7 +11,7 @@ on:
       - 'foundry-agent-skillpack/.apm/prompts/**'
       - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
       # Recipe mirror needs to re-run when fixtures recipes change.
-      - 'foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/**'
+      - 'foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/**'
   pull_request:
     branches: [main]
     paths:
@@ -19,7 +19,7 @@ on:
       - 'foundry-agent-skillpack/.apm/skills/**'
       - 'foundry-agent-skillpack/.apm/prompts/**'
       - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
-      - 'foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/**'
+      - 'foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/**'
   workflow_dispatch: {}
 
 permissions:

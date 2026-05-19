@@ -219,7 +219,7 @@ python .agents/skills/foundry-evals/scripts/ensure_continuous_eval.py \
 
 ## Where to go next
 
-  - Want LangGraph instead? See [`fixtures/langgraph-chat-fixture/`](../fixtures/langgraph-chat-fixture/) — same lifecycle, different runtime.
+  - Want LangGraph instead? See [`fixtures/langgraph-chat-sample/`](../samples/langgraph-chat-sample/) — same lifecycle, different runtime.
   - Want a knowledge base? See [03-knowledge-with-purview.md](03-knowledge-with-purview.md).
   - Want regression-set evaluation? See [04-ai-search-with-scheduled-eval.md](04-ai-search-with-scheduled-eval.md).
   - Brownfield instead? See [02-brownfield-onboarding.md](02-brownfield-onboarding.md).

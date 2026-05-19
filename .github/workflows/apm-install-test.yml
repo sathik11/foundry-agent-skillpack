@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'foundry-agent-skillpack/**'
-      - 'foundry-agent-fixtures/**'
+      - 'foundry-agent-playbook/**'
       - '.github/workflows/apm-install-test.yml'
   push:
     branches: [main]
@@ -32,7 +32,7 @@ jobs:
           echo "--- Installing skillpack ---"
           apm install "$GITHUB_WORKSPACE/foundry-agent-skillpack"
           echo "--- Installing fixtures ---"
-          apm install "$GITHUB_WORKSPACE/foundry-agent-fixtures"
+          apm install "$GITHUB_WORKSPACE/foundry-agent-playbook"
 
       - name: Verify installed artifacts
         run: |
@@ -44,7 +44,7 @@ jobs:
           echo "=== Key files ==="
           test -f .agents/skills/foundry-deploy/SKILL.md
           test -f .agents/skills/foundry-deploy/runtime-dependencies.md
-          test -f .agents/skills/foundry-agent-fixtures/SKILL.md
+          test -f .agents/skills/foundry-agent-playbook/SKILL.md
           echo "All checks passed"
 
       - name: APM audit (non-blocking)

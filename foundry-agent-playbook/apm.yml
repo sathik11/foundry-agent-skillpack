@@ -1,0 +1,24 @@
+name: foundry-agent-playbook
+version: 0.2.0
+# v0.2.0: Renamed from foundry-agent-fixtures → foundry-agent-playbook.
+#   - fixtures/ → samples/ (learn-agent, langgraph-chat-sample).
+#   - langgraph-chat-fixture → langgraph-chat-sample.
+#   - Alias ships for one release so existing consumers' apm.yml keeps resolving.
+aliases: [foundry-agent-fixtures]
+description: >
+  Runnable samples and end-to-end recipes (the playbook) for the
+  foundry-agent-skillpack APM package. Opt-in install for learners and
+  smoke testers; consumers using the engineering package in production
+  do not need this.
+author: Sathik Basha
+license: MIT
+repository: https://github.com/sathik11/foundry-agent-skillpack
+
+# APM auto-discovers .apm/* directories. We use a custom layout (.apm/samples/
+# and .apm/recipes/) — these are skill-target assets, not skills/prompts/agents
+# themselves. See README.md for the install layout consumers see.
+includes: auto
+
+# Ship as agent-skills only — fixtures are static folders, not per-client
+# customizations. The engineering package handles the per-client targets.
+targets: [agent-skills]

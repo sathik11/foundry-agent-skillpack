@@ -17,7 +17,7 @@
 Two installable APM packages plus a hosted documentation site:
 
 - **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 9 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
-- **`foundry-agent-fixtures/`** — opt-in: 2 runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) and 6 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, APIM-fronted MCP, and multi-agent orchestration.
+- **`foundry-agent-playbook/`** — opt-in: 2 runnable samples (`learn-agent`, `langgraph-chat-sample`) and 6 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, APIM-fronted MCP, and multi-agent orchestration.
 - **`docs/`** — Astro Starlight site rendered to Azure Static Web Apps.
 
 ## Install
@@ -34,8 +34,8 @@ EOF
 # 1. Engineering skillpack — knowledge + prompts + scripts
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 
-# 2. Optional but recommended: fixtures + recipes
-apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures
+# 2. Optional but recommended: playbook (samples + recipes)
+apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook
 ```
 
 > **Already have `apm.yml`?** Add a `targets:` line if missing — APM CLI no longer auto-defaults to `copilot` and refuses to install without one. See [docs → Install → Troubleshooting](https://foundry-agent-skillpack.example.com/getting-started/install/#troubleshooting--no-harness-detected).
@@ -85,11 +85,11 @@ foundry-agent-skillpack/
 │       ├── prompts/              # 9 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
-├── foundry-agent-fixtures/       # Fixtures + recipes (opt-in)
+├── foundry-agent-playbook/       # Fixtures + recipes (opt-in)
 │   ├── apm.yml
 │   ├── README.md
-│   └── .apm/skills/foundry-agent-fixtures/
-│       ├── fixtures/             # learn-agent, langgraph-chat-fixture
+│   └── .apm/skills/foundry-agent-playbook/
+│       ├── samples/             # learn-agent, langgraph-chat-sample
 │       └── recipes/              # 5 end-to-end walkthroughs
 ├── docs/                         # Astro Starlight docs site
 ├── ROADMAP.md
@@ -101,8 +101,8 @@ foundry-agent-skillpack/
 
 | You are… | Read |
 |---|---|
-| New to Foundry hosted agents — building from scratch | [Recipe 01 — Greenfield Quickstart](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md) |
-| Already have working agent code, want to host it on Foundry | [Recipe 02 — Brownfield Onboarding](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md) |
+| New to Foundry hosted agents — building from scratch | [Recipe 01 — Greenfield Quickstart](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md) |
+| Already have working agent code, want to host it on Foundry | [Recipe 02 — Brownfield Onboarding](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md) |
 | Want to validate the package end-to-end against a real Foundry project | [TESTING_SCENARIOS.md](TESTING_SCENARIOS.md) |
 | Just want to smoke-test that `apm install` works | [TESTING.md](TESTING.md) |
 

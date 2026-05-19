@@ -18,7 +18,7 @@ An [APM](https://microsoft.github.io/apm/) package that gives your AI coding age
 /plan-agent → /prepare-deploy → azd up → /configure-rbac → /verify-agent → /setup-evals
 ```
 
-> **New to Foundry hosted agents?** After installing this package, also install [foundry-agent-fixtures](../foundry-agent-fixtures) and start with [recipe 01 — Greenfield Quickstart](../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md). It's a ~30 minute end-to-end walkthrough.
+> **New to Foundry hosted agents?** After installing this package, also install [foundry-agent-playbook](../foundry-agent-playbook) and start with [recipe 01 — Greenfield Quickstart](../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md). It's a ~30 minute end-to-end walkthrough.
 
 > **Boundary.** APM scaffolds, validates, audits, and dispatches per-capability gates. `azd up` (with the `azd ai agent` extension) deploys. The eval / red-team wrappers under `foundry-evals/` create Foundry-native `EvaluationRule` / `RedTeam` resources via `azure-ai-projects` SDK — so audit lives inside Foundry, not sideband CI artifacts. This package never runs `az acr build` or POSTs raw control-plane REST itself — the extension owns image build, agent create, version create, and identity assignment.
 

@@ -80,7 +80,7 @@ Ask the user **once**:
    - Deterministic logic that can short-circuit the LLM → Pattern 1c (Middleware)
    - All data via Foundry Toolbox MCP → Pattern 1b/1g
    - External MCP server (Microsoft Learn, GitHub, custom) → Pattern 1a + `client.get_mcp_tool(...)` (see **foundry-deploy** [external-mcp.md](../skills/foundry-deploy/external-mcp.md))
-   - Multiple agents needed (orchestrator + siblings, sequential or parallel) → Pattern 2a/2b/2c. Switch to the **foundry-multi-agent** skill for sub-agent invocation, the inter-tool data buffer (>25 records / >20KB), and SSE streaming (>120s pipelines). For an end-to-end walkthrough see [Recipe 06](../../../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/06-multi-agent-orchestration.md).
+   - Multiple agents needed (orchestrator + siblings, sequential or parallel) → Pattern 2a/2b/2c. Switch to the **foundry-multi-agent** skill for sub-agent invocation, the inter-tool data buffer (>25 records / >20KB), and SSE streaming (>120s pipelines). For an end-to-end walkthrough see [Recipe 06](../../../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/06-multi-agent-orchestration.md).
    Confirm with the user before generating files.
 2. **Copy templates** from `foundry-deploy/templates/` and substitute placeholders:
    ```bash

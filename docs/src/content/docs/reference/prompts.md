@@ -31,7 +31,7 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 **Writes:** `agent-capabilities.yaml` (with `target:` and `model:` blocks; populated capability blocks for what the user said yes to). Optionally agent-framework template files (`Dockerfile`, `agent.yaml`, `main.py`, `requirements.txt`, `tools.py`, `guardrails.py`).
 
-**Anti-synthesis guard:** the prompt forbids `az`/`curl`/`python -c` shortcuts and forbids echoing model names from recipes/fixtures. Every value comes from a listed MCP tool or an explicit user picklist selection.
+**Anti-synthesis guard:** the prompt forbids `az`/`curl`/`python -c` shortcuts and forbids echoing model names from recipes/samples. Every value comes from a listed MCP tool or an explicit user picklist selection.
 
 ## /prepare-deploy
 

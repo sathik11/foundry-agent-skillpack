@@ -52,7 +52,7 @@ Two installable APM packages plus a hosted documentation site:
     and Purview DLP. Per-agent durable state.
   </Card>
   <Card title="Fixtures + recipes" icon="open-book">
-    Two runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) plus six
+    Two runnable fixtures (`learn-agent`, `langgraph-chat-sample`) plus six
     end-to-end recipes covering greenfield, brownfield, knowledge + Purview,
     AI Search + scheduled eval, APIM-fronted MCP, and multi-agent
     orchestration with data buffer + SSE.
@@ -147,8 +147,8 @@ EOF
 # 1. Install the engineering skillpack — knowledge + prompts + scripts
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 
-# 2. Optional: install the fixtures package — recipes + runnable fixtures
-apm install sathik11/foundry-agent-skillpack/foundry-agent-fixtures
+# 2. Optional: install the playbook package — recipes + runnable fixtures
+apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook
 ```
 
 > **Already have `apm.yml`?** Make sure it has a `targets:` line (e.g. `targets: [copilot, agent-skills]`) — APM no longer auto-defaults to `copilot` and will refuse to install otherwise. Full target list: see [Install → Choosing targets](/getting-started/install/#troubleshooting--no-harness-detected).
@@ -164,7 +164,7 @@ azd up
 /setup-evals agent_name=hello-foundry agent_path=agents/hello-foundry
 ```
 
-The first 30 minutes are documented step-by-step in the [Greenfield Quickstart](/getting-started/greenfield/) (or read the underlying recipe [on GitHub](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)).
+The first 30 minutes are documented step-by-step in the [Greenfield Quickstart](/getting-started/greenfield/) (or read the underlying recipe [on GitHub](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md)).
 
 ## What this is not
 

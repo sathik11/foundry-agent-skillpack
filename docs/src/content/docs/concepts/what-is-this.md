@@ -54,7 +54,7 @@ The skillpack ships as two installable packages:
 | Package | Contents | Required? |
 | --- | --- | --- |
 | `foundry-agent-skillpack` | Skills, prompts, scripts, persona | Yes — this is the skillpack |
-| `foundry-agent-fixtures` | Recipes (5 walkthroughs) + runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) | Optional — install for learning + smoke tests |
+| `foundry-agent-playbook` | Recipes (5 walkthroughs) + runnable fixtures (`learn-agent`, `langgraph-chat-sample`) | Optional — install for learning + smoke tests |
 
 In production, install only the engineering package. In dev / learning / smoke-testing scenarios, install both.
 

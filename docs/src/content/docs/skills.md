@@ -31,7 +31,7 @@ Skill content is the canonical source — these pages link to it on GitHub for n
 
 | Skill | Purpose |
 | --- | --- |
-| **foundry-agent-fixtures** | Runnable fixtures + 6 end-to-end recipes — reference material; not loaded into agent context for normal use |
+| **foundry-agent-playbook** | Runnable fixtures + 6 end-to-end recipes — reference material; not loaded into agent context for normal use |
 
 ## Skill anatomy
 

@@ -3,10 +3,10 @@
 This repo ships **two installable APM packages** plus end-to-end recipes:
 
 1. **The engineering package** — `foundry-agent-skillpack/` — installs as 15 skills + 9 prompts + 1 agent persona.
-2. **The fixtures package** — `foundry-agent-fixtures/` — opt-in; ships runnable fixtures (`learn-agent`, `langgraph-chat-fixture`) and 5 end-to-end recipes.
-3. **A flawed fixture** — `learn-agent` (now inside the fixtures package) — deliberately broken to exercise the `/prepare-deploy` slash command end-to-end.
+2. **The playbook package** — `foundry-agent-playbook/` — opt-in; ships runnable fixtures (`learn-agent`, `langgraph-chat-sample`) and 5 end-to-end recipes.
+3. **A flawed fixture** — `learn-agent` (now inside the playbook package) — deliberately broken to exercise the `/prepare-deploy` slash command end-to-end.
 
-Full recipe-driven walkthroughs (greenfield, brownfield, 3-surface scenarios): see [TESTING_SCENARIOS.md](TESTING_SCENARIOS.md) and the per-recipe files inside the fixtures package.
+Full recipe-driven walkthroughs (greenfield, brownfield, 3-surface scenarios): see [TESTING_SCENARIOS.md](TESTING_SCENARIOS.md) and the per-recipe files inside the playbook package.
 
 ---
 
@@ -28,7 +28,7 @@ version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
 apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
-apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures   # opt-in
+apm install /path/to/foundry-agent-skillpack/foundry-agent-playbook   # opt-in
 ```
 
 **Expected output:**
@@ -39,7 +39,7 @@ apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures   # opt-in
   |-- 9 prompts integrated -> .github/prompts/
   |-- 1 agents integrated -> .github/agents/
   |-- 15 skill(s) integrated -> .agents/skills/
-  [+] foundry-agent-fixtures (local)
+  [+] foundry-agent-playbook (local)
   |-- 1 skill(s) integrated -> .agents/skills/
 ```
 
@@ -48,8 +48,8 @@ apm install /path/to/foundry-agent-skillpack/foundry-agent-fixtures   # opt-in
 ```bash
 ls .agents/skills | wc -l                                                          # → 16 (15 engineering + 1 fixtures-package skill)
 ls .github/prompts                                                                  # → 9 .prompt.md files
-find .agents/skills/foundry-agent-fixtures/fixtures -mindepth 1 -maxdepth 1 -type d # → 2 (learn-agent, langgraph-chat-fixture)
-find .agents/skills/foundry-agent-fixtures/recipes -name '*.md' | wc -l             # → 6 (README + 5 recipes)
+find .agents/skills/foundry-agent-playbook/fixtures -mindepth 1 -maxdepth 1 -type d # → 2 (learn-agent, langgraph-chat-sample)
+find .agents/skills/foundry-agent-playbook/recipes -name '*.md' | wc -l             # → 6 (README + 5 recipes)
 ```
 
 If any number differs, something is being treated as a stray skill at the package root — fix and reinstall.
@@ -58,10 +58,10 @@ If any number differs, something is being treated as a stray skill at the packag
 
 ## Half 2 — Run `/prepare-deploy` against the fixture agent
 
-The `learn-agent` fixture (now under `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/fixtures/learn-agent/`) is **intentionally flawed** so the prompt has something to catch. Copy it into your test workspace first:
+The `learn-agent` fixture (now under `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/samples/learn-agent/`) is **intentionally flawed** so the prompt has something to catch. Copy it into your test workspace first:
 
 ```bash
-cp -r .agents/skills/foundry-agent-fixtures/fixtures/learn-agent agents/learn-agent
+cp -r .agents/skills/foundry-agent-playbook/samples/learn-agent agents/learn-agent
 ```
 
 The flaws are:
@@ -102,7 +102,7 @@ Optional: have the agent auto-fix flaws #1–#4 (vendor `guardrails.py` from `.a
 
 ## Half 3 — End-to-end recipes
 
-Five scenario recipes live under `foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/`:
+Five scenario recipes live under `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/`:
 
 | # | Recipe | Surfaces |
 |---|---|---|
@@ -112,7 +112,7 @@ Five scenario recipes live under `foundry-agent-fixtures/.apm/skills/foundry-age
 | 04 | AI Search direct + scheduled eval | agent + AI Search + scheduled eval gate |
 | 05 | APIM-fronted MCP + RBAC + drift | agent + APIM + RBAC + drift |
 
-Start at the [recipes index](foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/README.md) for the decision tree (greenfield vs brownfield).
+Start at the [recipes index](foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/README.md) for the decision tree (greenfield vs brownfield).
 
 ## Other prompts to smoke-test (no live Foundry needed)
 

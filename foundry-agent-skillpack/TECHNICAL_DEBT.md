@@ -176,7 +176,7 @@ Tracked gaps and trade-offs in the foundry-agent-skillpack APM package. Each ent
 **Status:** Closed in v0.17.0. Implementation: [.apm/prompts/audit-drift.prompt.md](.apm/prompts/audit-drift.prompt.md) (single prompt, no new scripts). Forward + reverse drift detection. Stamps `agent-status.json` `verify` block with `last_audit_at`, `audit_summary`, `audit_report_path` (additive — doesn't replace `/verify-agent`'s fields).
 
 **Operational integration:**
-- Documented in [recipes/02-brownfield-onboarding.md](../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/02-brownfield-onboarding.md) Step 9 as the recommended weekly maintenance task.
+- Documented in [recipes/02-brownfield-onboarding.md](../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/02-brownfield-onboarding.md) Step 9 as the recommended weekly maintenance task.
 - Designed for non-blocking CI scheduling — not a PR gate. (`/verify-agent` is the PR gate.)
 
 ## TD-13 — Brownfield code scan is regex-only (acceptable trade-off, tracked for visibility)

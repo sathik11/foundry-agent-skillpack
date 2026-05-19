@@ -3,12 +3,12 @@
  * Mirror recipes from the fixtures package into the docs site so Starlight
  * renders them as in-site pages.
  *
- * Why: recipes are authored once in `foundry-agent-fixtures/.apm/skills/...`
+ * Why: recipes are authored once in `foundry-agent-playbook/.apm/skills/...`
  * (single source of truth). The docs site renders them at /recipes/<slug>/.
  * Running this script before `astro build` keeps the mirror fresh.
  *
  * What it does:
- *  - Reads recipes from: ../foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/
+ *  - Reads recipes from: ../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/
  *  - Writes them to:     ./src/content/docs/recipes/
  *  - Preserves filenames (01-greenfield-quickstart.md → 01-greenfield-quickstart.md).
  *  - The recipes/README.md becomes recipes/index.md.
@@ -30,10 +30,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..');
 const SRC_DIR = join(
   REPO_ROOT,
-  'foundry-agent-fixtures',
+  'foundry-agent-playbook',
   '.apm',
   'skills',
-  'foundry-agent-fixtures',
+  'foundry-agent-playbook',
   'recipes'
 );
 const DST_DIR = join(__dirname, '..', 'src', 'content', 'docs', 'recipes');

@@ -130,7 +130,7 @@ async function checkSkills() {
         // here. When a real skill is removed, the test will still fire.
         m !== 'foundry-agent-engineering' && // historical name
         m !== 'foundry-agent-skillpack' && // the package itself
-        m !== 'foundry-agent-fixtures' && // sibling package
+        m !== 'foundry-agent-playbook' && // sibling package
         m !== 'foundry-iq' && // knowledge source kind, lives under foundry-knowledge/
         m !== 'foundry-engineer', // agent persona file (foundry-engineer.agent.md)
     ),

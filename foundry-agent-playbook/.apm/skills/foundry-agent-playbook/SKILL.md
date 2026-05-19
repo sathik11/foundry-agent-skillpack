@@ -1,5 +1,5 @@
 ---
-name: foundry-agent-fixtures
+name: foundry-agent-playbook
 description: Runnable fixtures and end-to-end recipes for the foundry-agent-skillpack APM package. Reference material — not loaded into agent context for normal use; consult when smoke-testing the engineering package or following an end-to-end walkthrough.
 ---
 
@@ -16,7 +16,7 @@ Static asset folders shipped under the `agent-skills` target. **Not** consumed b
 | 3-surface scenario: AI Search direct + scheduled eval gating publish | [recipes/04-ai-search-with-scheduled-eval.md](recipes/04-ai-search-with-scheduled-eval.md) |
 | 3-surface scenario: APIM-fronted MCP + RBAC verify + drift baseline | [recipes/05-apim-fronted-mcp.md](recipes/05-apim-fronted-mcp.md) |
 | Flawed agent-framework fixture (deploy gate exercise) | [fixtures/learn-agent/](fixtures/learn-agent/) |
-| Clean LangGraph BYO fixture (success-path smoke) | [fixtures/langgraph-chat-fixture/](fixtures/langgraph-chat-fixture/) |
+| Clean LangGraph BYO fixture (success-path smoke) | [fixtures/langgraph-chat-sample/](fixtures/langgraph-chat-sample/) |
 
 ## How fixtures and recipes relate
 

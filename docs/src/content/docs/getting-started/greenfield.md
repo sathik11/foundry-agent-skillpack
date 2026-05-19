@@ -5,13 +5,13 @@ description: Stand up a working hosted agent in ~30 minutes, end-to-end.
 
 You have nothing. You want a working hosted agent on Foundry that calls the public Microsoft Learn MCP server, has middleware guardrails, and gets continuous evaluation.
 
-The full step-by-step lives in **Recipe 01** inside the fixtures package. After installing both packages, open it locally:
+The full step-by-step lives in **Recipe 01** inside the playbook package. After installing both packages, open it locally:
 
 ```bash
-.agents/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md
+.agents/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md
 ```
 
-[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-fixtures/.apm/skills/foundry-agent-fixtures/recipes/01-greenfield-quickstart.md)
+[View the recipe on GitHub →](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md)
 
 ## What you'll touch
 
