@@ -22,8 +22,8 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 **Inputs:** `name`, `description`, optional `track` (A: pattern selection / B: scaffold from template).
 
 **Steps:**
-- **Step 0a** — Target + caller-role preflight. Picklists for subscription → RG → Foundry account → project; runs `preflight-role.sh plan-agent` (Reader on RG); stamps `target:` block in `agent-capabilities.yaml`.
-- **Step 0b** — Model selection (see [foundry-deploy/model-selection.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)). List existing deployments via `mcp_azure_mcp_foundry`; user picks existing OR catalog → deploy-with-consent (`Cognitive Services Contributor` + quota check + explicit `y/N`) OR runbook. Stamps `model:` block.
+- **Step 0a** — Target discovery + caller-role preflight. Runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) to find account / project / ACR / model in one call; then [`preflight-roles.sh plan-agent`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for batch role check. Stamps `operator_mode: true` + `target:` block in `agent-capabilities.yaml`.
+- **Step 0b** — Model selection via [`select-model.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/select-model.sh). Auto-selects when unambiguous (hint match → single deployment → first agents-capable); interactive only when `MODEL_SELECTION_METHOD=manual-needed`. Stamps `model:` block.
 - **Step 0c** — Track selection (A wrap / B scaffold / C prompt agent).
 - **Tracks A/B/C** generate the agent files.
 - **Step 4** — Capability interview (toolbox / knowledge / fabric / teams / guardrails / purview / evals).
@@ -38,10 +38,10 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 **Inputs:** `agent_path`, optional `resource_group` (override).
 
 **Steps:**
-0. **Caller-role + target preflight (FAIL-FAST).** Reads `target:` from `agent-capabilities.yaml`; only re-elicits on missing fields. Runs `preflight-role.sh prepare-deploy` for `Contributor` on RG + `Azure AI Developer` on project.
+0. **Caller-role + target preflight (FAIL-FAST).** Reads `operator_mode` + `target:` from `agent-capabilities.yaml`; exports `OPERATOR_MODE` for downstream scripts. Only re-elicits on missing fields (runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) if needed). Batch role check via [`preflight-roles.sh prepare-deploy`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for `Contributor` on RG + `Azure AI Developer` on project.
 1. Detect agent kind (hosted vs prompt).
 2. Foundry resource validation (re-uses Step 0 target; only re-prompts for ACR on Track H).
-   - **Step 2.4** — Model deployment validation + 3-way fork on 404 (pick existing / deploy-with-consent / print runbook — same algorithm as `/plan-agent` Step 0b, see [model-selection.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md)).
+   - **Step 2.4** — Model deployment validation. If `MODEL_DEPLOYMENT_NAME` already populated by `discover-target.sh` or `/plan-agent` Step 0b, validates it exists; 3-way fork only on 404 (pick existing / deploy-with-consent / print runbook).
    - **Step 2.5** — Read `agent-capabilities.yaml` and dispatch per-capability Phase A.
 3. `azure.yaml` validation.
 4. RBAC preflight recap (already enforced in Step 0).

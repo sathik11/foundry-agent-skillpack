@@ -59,14 +59,21 @@ After `apm install`, you'll see (depending on your `targets:`):
     apim-as-mcp-frontdoor.md  ← APIM AI Gateway pattern (rate limit, OAuth, audit)
     capabilities-manifest.md, agent-status-schema.md
     scripts/agent_status.py   ← per-agent durable state helper (used by 3 prompts)
+    scripts/discover-target.sh ← NEW (v0.21.0) one-call target discovery
+    scripts/select-model.sh    ← NEW (v0.21.0) auto-select model deployment
+    scripts/safe-azd-init.sh   ← NEW (v0.21.0) guarded azd init
     templates/                ← agent-framework templates (4 files)
-    templates/langgraph-byo/  ← NEW — LangGraph BYO Responses-protocol template (6 files)
+    templates/langgraph-byo/  ← LangGraph BYO Responses-protocol template (6 files)
   foundry-identity/
     SKILL.md, two-identities.md, rbac-matrix.md, entra-agent-id.md
     scripts/check-identities.sh, scripts/grant-rbac.sh
-  foundry-roles/                          ← caller-side role preflight + runbook emit
+  foundry-roles/                          ← caller-side role preflight + operator mode
     SKILL.md, role-matrix.md, runbook-format.md
-    scripts/preflight-role.sh, scripts/runbook-emit.sh, scripts/list-my-roles.sh
+    operator-mode.md                          ← NEW (v0.21.0) try-first pattern doc
+    scripts/preflight-role.sh, scripts/preflight-roles.sh,  ← NEW batch version
+    scripts/try-or-runbook.sh,                ← NEW (v0.21.0) operator-mode core primitive
+    scripts/ensure-provider-registration.sh,  ← NEW (v0.21.0) auto-register providers
+    scripts/runbook-emit.sh, scripts/list-my-roles.sh
   foundry-knowledge/                      ← Foundry IQ, AI Search, file-search, blob-via-search; cross-links Fabric
     SKILL.md, decision-tree.md, foundry-iq.md, ai-search.md, file-search-tool.md,
     blob-via-search.md, network-compatibility.md
@@ -82,8 +89,8 @@ After `apm install`, you'll see (depending on your `targets:`):
     SKILL.md, middleware.md, content-safety.md, redteam-evals.md, capability-gates.md
     purview-dlp.md           ← NEW — Layer 1.5 unique enforcement gap (Foundry-hosted-only)
     scripts/guardrails.py, scripts/redteam.yml, scripts/grant-cs-access.sh
-    scripts/purview_dlp_middleware.py        ← NEW — vendored Purview DLP middleware
-    scripts/grant-purview-dlp-access.sh      ← NEW — tenant-scoped Phase B grant (runbook-emitting)
+    scripts/purview_dlp_middleware.py        ← vendored Purview DLP middleware
+    scripts/grant-purview-dlp-access.sh      ← operator-mode aware (tries Graph REST, runbook on 403)
     scripts/kql/guardrail-spans.kql
   foundry-prod-readiness/
     SKILL.md, networking.md
@@ -96,8 +103,11 @@ After `apm install`, you'll see (depending on your `targets:`):
   foundry-observability/
     SKILL.md, scripts/kql/*.kql
   foundry-teams-workiq/
-    SKILL.md, publish-flow.md,               ← NEW (v0.20.0, TD-2) identity-flip publish flow
+    SKILL.md, publish-flow.md,               ← (v0.20.0, TD-2) identity-flip publish flow
     scripts/preflight-publish.sh, scripts/refan-rbac-post-publish.sh
+  foundry-fabric/
+    SKILL.md
+    scripts/grant-fabric-workspace-role.sh   ← NEW (v0.21.0) operator-mode Fabric role grant
   …6 more skills…
 
 .github/prompts/                          ← 9 slash commands

@@ -10,6 +10,9 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 | Script | What it does | Reader required |
 | --- | --- | --- |
 | [`preflight-role.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-role.sh) | Single-call: do I have role X on scope Y? Emits runbook on failure | Reader on scope |
+| [`preflight-roles.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) | Batch: checks all roles a prompt needs in one call (`plan-agent`, `prepare-deploy`, etc.) | Reader on scopes |
+| [`try-or-runbook.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/try-or-runbook.sh) | Operator-mode core primitive: wraps any `az` command — tries it, runbook-emit on 403. Respects `OPERATOR_MODE=false` | none |
+| [`ensure-provider-registration.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/ensure-provider-registration.sh) | Auto-registers a resource provider (e.g. `Microsoft.BotService`); runbook on 403 | Contributor on sub |
 | [`runbook-emit.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/runbook-emit.sh) | Standalone runbook emitter | none |
 | [`list-my-roles.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/list-my-roles.sh) | Debug: dump every role the caller has across declared scopes | Reader on scopes |
 
@@ -25,6 +28,9 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 | Script | What it does |
 | --- | --- |
 | [`agent_status.py`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/agent_status.py) | The only writer of `agent-status.json`. Subcommands: `init`, `read`, `update`, `hash`, `drift` |
+| [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) | One-call discovery: Foundry account + project + ACR + model deployments in a resource group. KEY=VALUE output |
+| [`select-model.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/select-model.sh) | Auto-select model deployment: hint match → single → first agents-capable → manual only when ambiguous |
+| [`safe-azd-init.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/safe-azd-init.sh) | Guarded `azd ai agent init`: checks for .git / azure.yaml / file clobber before running |
 
 ## foundry-knowledge
 
@@ -50,7 +56,7 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 | [`guardrails.py`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/guardrails.py) | Vendored Layer 1 middleware (jailbreak, XPIA, length, optional CS) |
 | [`purview_dlp_middleware.py`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/purview_dlp_middleware.py) | Vendored Layer 1.5 — Purview DLP enforcement (audit_only / warn / block) |
 | [`grant-cs-access.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/grant-cs-access.sh) | Phase B grant: per-agent SP → Cognitive Services User on CS resource |
-| [`grant-purview-dlp-access.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/grant-purview-dlp-access.sh) | Phase B grant: tenant-scoped (Purview Information Protection Reader + AIP Service Reader); emits Tenant Admin runbook |
+| [`grant-purview-dlp-access.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/grant-purview-dlp-access.sh) | Phase B grant: tenant-scoped Purview roles; operator-mode aware (tries Graph REST first, runbook on 403) |
 | [`redteam.yml`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/redteam.yml) | PyRIT-in-CI fallback (when cloud red-team region not available) |
 | [`kql/guardrail-spans.kql`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/kql/guardrail-spans.kql) | App Insights query: guardrail span count by layer |
 
@@ -59,6 +65,12 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 | Script | What it does |
 | --- | --- |
 | [`example-script-runner.py`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-skills/scripts/example-script-runner.py) | Canonical safe `script_runner` for `SkillsProvider` (path-traversal guard, 60s timeout, OTel span) |
+
+## foundry-fabric
+
+| Script | What it does |
+| --- | --- |
+| [`grant-fabric-workspace-role.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-fabric/scripts/grant-fabric-workspace-role.sh) | Operator-mode aware: tries Fabric REST API for workspace role assignment; runbook on 401/403 (partial TD-1 closure) |
 
 ## foundry-prod-readiness
 
@@ -79,7 +91,7 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 
 - **Bash**: `set -euo pipefail`; positional args validated with `${1:?usage…}`; `chmod +x`.
 - **Python**: standalone (no own `requirements.txt`); `from __future__ import annotations`; lazy SDK imports for optional deps.
-- **All scripts**: idempotent; safe to re-run; read-only checks degrade to checklist if Reader missing; mutating scripts emit runbooks when role-preflight fails.
+- **All scripts**: idempotent; safe to re-run; read-only checks degrade to checklist if Reader missing; mutating scripts use the try-or-runbook pattern when `OPERATOR_MODE=true` (default), falling back to runbook-emit on 403.
 
 ## Read next
 

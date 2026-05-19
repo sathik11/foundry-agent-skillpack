@@ -1,12 +1,20 @@
 # Roadmap
 
-The skillpack is at **v0.20.0** (May 2026). What's next is sequenced by *value of unblocking* × *real cost of building*. Open follow-ons are tracked as `TD-N` entries in [foundry-agent-skillpack/TECHNICAL_DEBT.md](foundry-agent-skillpack/TECHNICAL_DEBT.md).
+The skillpack is at **v0.21.0** (May 2026). What's next is sequenced by *value of unblocking* × *real cost of building*. Open follow-ons are tracked as `TD-N` entries in [foundry-agent-skillpack/TECHNICAL_DEBT.md](foundry-agent-skillpack/TECHNICAL_DEBT.md).
 
 For the rendered version with cross-links, see the [docs site Roadmap page](docs/src/content/docs/roadmap.md).
 
 ---
 
 ## Shipped recently
+
+### v0.21.0 (May 2026) — Operator mode + discovery scripts
+
+- [x] **Operator mode (try-first pattern).** Scripts now attempt actions directly and only emit runbooks on 403, replacing the old persona-gated “always emit runbook” behavior. `operator_mode: true` (default) written to `agent-capabilities.yaml` by `/plan-agent` Step 0a; read by all downstream prompts. Set `false` for SOC-monitored environments. See `foundry-roles/operator-mode.md`.
+- [x] **Discovery scripts.** `discover-target.sh` (account + project + ACR + model in one call), `select-model.sh` (auto-selects when unambiguous), `safe-azd-init.sh` (guards against file clobber + .git reinit).
+- [x] **Batch preflight.** `preflight-roles.sh` takes a prompt name and checks all required roles in one call. Fixes the wrong-interface `preflight-role.sh plan-agent <sub> <rg>` calls.
+- [x] **Operator-mode grant scripts.** `try-or-runbook.sh` (core primitive), `ensure-provider-registration.sh`, `grant-fabric-workspace-role.sh` (partial TD-1 closure), rewritten `grant-purview-dlp-access.sh`.
+- [x] **Prompt updates.** `/plan-agent` and `/prepare-deploy` rewritten to use discovery + batch preflight scripts.
 
 ### v0.20.0 (May 2026) — TD-2 + TD-10 close-out
 
@@ -29,7 +37,7 @@ For the rendered version with cross-links, see the [docs site Roadmap page](docs
 
 ---
 
-## Next minor (v0.21)
+## Next minor (v0.22)
 
 | Item | Source | Notes |
 |---|---|---|

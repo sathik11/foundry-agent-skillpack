@@ -3,9 +3,17 @@ title: Roadmap
 description: What's done, what's next, and what's deferred — with the reasoning for each.
 ---
 
-The skillpack is at **v0.20.0** (May 2026). What's next is sequenced by *value of unblocking* + *real cost of building*. Open follow-ons are tracked in [TECHNICAL_DEBT.md](/technical-debt/) on disk.
+The skillpack is at **v0.21.0** (May 2026). What's next is sequenced by *value of unblocking* + *real cost of building*. Open follow-ons are tracked in [TECHNICAL_DEBT.md](/technical-debt/) on disk.
 
 ## Shipped recently
+
+### v0.21.0 — Operator mode + discovery scripts
+
+- ✅ **Operator mode (try-first pattern).** Scripts attempt actions directly; runbook only on 403. `operator_mode: true` (default) stamped in `agent-capabilities.yaml` by `/plan-agent` Step 0a. Set `false` for SOC-monitored environments. See `foundry-roles/operator-mode.md`.
+- ✅ **Discovery scripts.** `discover-target.sh` (account + project + ACR + model in one call), `select-model.sh` (auto-selects when unambiguous), `safe-azd-init.sh` (guards file clobber + .git reinit).
+- ✅ **Batch preflight.** `preflight-roles.sh` checks all roles a prompt needs in one call.
+- ✅ **Operator-mode grant scripts.** `try-or-runbook.sh`, `ensure-provider-registration.sh`, `grant-fabric-workspace-role.sh` (partial TD-1 closure), rewritten `grant-purview-dlp-access.sh`.
+- ✅ **Prompt rewrites.** `/plan-agent` and `/prepare-deploy` use discovery + batch preflight instead of ad-hoc MCP queries.
 
 ### v0.20.0 — TD-2 + TD-10 close-out
 
@@ -16,7 +24,7 @@ The skillpack is at **v0.20.0** (May 2026). What's next is sequenced by *value o
 
 ### v0.19.0
 
-- ✅ Package renamed from `foundry-agent-harness` → `foundry-agent-skillpack` (`aliases: [foundry-agent-harness]` ships through v0.20.0 — retirement deferred to v0.21.0 per TD-19).
+- ✅ Package renamed from `foundry-agent-harness` → `foundry-agent-skillpack` (`aliases: [foundry-agent-harness]` ships through v0.21.0 — retirement deferred to v0.22.0 per TD-19).
 - ✅ Astro Starlight documentation site (this site).
 - ✅ Azure Static Web Apps deployment workflow.
 - ✅ Docs drift checker (`docs/scripts/check-drift.mjs`).
@@ -26,7 +34,7 @@ The skillpack is at **v0.20.0** (May 2026). What's next is sequenced by *value o
 - ✅ Rename `foundry-agent-engineering` → `foundry-agent-harness` (superseded in v0.19.0).
 - ✅ ROADMAP at repo root + on this site.
 
-## Next minor (v0.21)
+## Next minor (v0.22)
 
 | Item | Source | Status |
 | --- | --- | --- |
