@@ -97,7 +97,15 @@ rm -rf /tmp/apm-test && mkdir /tmp/apm-test && cd /tmp/apm-test
 cat > apm.yml <<'EOF'
 name: apm-install-test
 version: 0.0.1
-targets: [copilot, agent-skills]
+targets:
+  - copilot
+  - agent-skills
+  - claude
+  - cursor
+  - windsurf
+  - codex
+  - gemini
+  - opencode
 EOF
 apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
 apm install /path/to/foundry-agent-skillpack/foundry-agent-playbook

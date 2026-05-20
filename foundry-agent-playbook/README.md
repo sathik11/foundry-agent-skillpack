@@ -23,7 +23,15 @@ After installing the engineering package:
 [ -f apm.yml ] || cat > apm.yml <<'EOF'
 name: my-foundry-project
 version: 0.0.1
-targets: [copilot, agent-skills]
+targets:
+  - copilot
+  - agent-skills
+  - claude
+  - cursor
+  - windsurf
+  - codex
+  - gemini
+  - opencode
 EOF
 
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack

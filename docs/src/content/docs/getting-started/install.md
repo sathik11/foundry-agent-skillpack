@@ -70,7 +70,15 @@ In your project root:
 cat > apm.yml <<'EOF'
 name: my-foundry-project
 version: 0.0.1
-targets: [copilot, agent-skills]   # add claude / cursor / windsurf as needed
+targets:
+  - copilot
+  - agent-skills
+  - claude
+  - cursor
+  - windsurf
+  - codex
+  - gemini
+  - opencode
 EOF
 
 # 2. Engineering skillpack — knowledge + prompts + scripts
@@ -129,7 +137,15 @@ Previously APM defaulted to copilot; this is now explicit.
 # apm.yml — minimum to install
 name: my-foundry-project
 version: 0.0.1
-targets: [copilot, agent-skills]   # the most common pairing
+targets:
+  - copilot
+  - agent-skills
+  - claude
+  - cursor
+  - windsurf
+  - codex
+  - gemini
+  - opencode
 ```
 
 | Target | Writes to | Use when |

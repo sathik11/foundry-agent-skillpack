@@ -2,7 +2,15 @@ name: foundry-agent-skillpack
 version: 1.0.0
 description: APM project for foundry-agent-skillpack
 author: sathik11
-targets: [copilot, agent-skills]
+targets:
+- copilot
+- agent-skills
+- claude
+- cursor
+- windsurf
+- codex
+- gemini
+- opencode
 dependencies:
   apm:
   - ./foundry-agent-skillpack

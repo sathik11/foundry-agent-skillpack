@@ -28,7 +28,15 @@ Two installable APM packages plus a hosted documentation site:
 [ -f apm.yml ] || cat > apm.yml <<'EOF'
 name: my-foundry-project
 version: 0.0.1
-targets: [copilot, agent-skills]   # add claude / cursor / windsurf as needed
+targets:
+  - copilot
+  - agent-skills
+  - claude
+  - cursor
+  - windsurf
+  - codex
+  - gemini
+  - opencode
 EOF
 
 # 1. Engineering skillpack — knowledge + prompts + scripts
