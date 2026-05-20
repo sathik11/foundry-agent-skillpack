@@ -164,13 +164,19 @@ apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook
 Then open a coding agent that reads APM-installed prompts (Copilot Chat with `.github/prompts/`, Claude Code with `.claude/commands/`, Cursor with `.cursor/skills/`, Windsurf with `.windsurf/skills/`, OpenCode, Gemini, or Codex via `AGENTS.md`) and run:
 
 ```text
-/plan-agent name=hello-foundry description="..."
+/plan-agent agent_name=hello-foundry description="..."
 /prepare-deploy agent_path=agents/hello-foundry
 azd up
 /configure-rbac agent_path=agents/hello-foundry agent_name=hello-foundry
 /verify-agent agent_name=hello-foundry test_query="Hi" agent_path=agents/hello-foundry
 /setup-evals agent_name=hello-foundry agent_path=agents/hello-foundry
 ```
+
+:::note[Slash commands vs skills]
+The 9 commands above (`/plan-agent`, `/prepare-deploy`, …) are **prompts** — executable workflows with inputs. The `/foundry-*` items your IDE may also surface (e.g. `/foundry-deploy`, `/foundry-identity`) are **skills** — knowledge corpus loaded as context, no inputs.
+
+See [Reference → Prompts](/reference/prompts/) for every command's parameters and the skills it pulls in.
+:::
 
 The first 30 minutes are documented step-by-step in the [Greenfield Quickstart](/getting-started/greenfield/) (or read the underlying recipe [on GitHub](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md)).
 

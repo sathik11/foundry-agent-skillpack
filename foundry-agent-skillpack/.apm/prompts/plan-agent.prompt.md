@@ -3,6 +3,7 @@ description: Plan a Foundry agent end-to-end — fork between scaffolding new co
 input:
   - agent_name: "Name for the agent (kebab-case, e.g. learn-agent)"
   - description: "One-line description of what this agent does and which tools/data it needs"
+  - operator_mode: "true|false — when true (default), downstream grant scripts attempt the action first and only emit runbooks on 403. Set 'false' for SOC-monitored environments where unauthorized attempts trigger alerts. Stamped into agent-capabilities.yaml so /prepare-deploy, /configure-rbac, /setup-purview, and /publish-teams all honor it. (optional, default 'true')"
 ---
 
 # Plan Agent: ${input:agent_name}
@@ -28,7 +29,7 @@ Before touching any files, discover the deployment target and confirm the caller
    ```
    If it exits non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key tells you exactly which roles are missing.
 5. **Stamp the manifest.** Create `agents/${input:agent_name}/agent-capabilities.yaml` if it does not exist, then write:
-   - `operator_mode: true` — at the top of the file, before `target:`. This enables the try-first pattern across all lifecycle prompts. The user can override to `false` for SOC-monitored environments (see [`foundry-roles/operator-mode.md`](../skills/foundry-roles/operator-mode.md)).
+   - `operator_mode: ${input:operator_mode}` — at the top of the file, before `target:`. Defaults to `true` when the input is omitted. When `true`, downstream grant scripts attempt the action first and only fall back to a runbook on 403. When `false`, scripts skip the attempt and emit a runbook directly (use for SOC-monitored environments). See [`foundry-roles/operator-mode.md`](../skills/foundry-roles/operator-mode.md) for the full pattern.
    - `target:` block from the discovered values. This file is the single source of truth for sub/RG/project across the whole lifecycle — `/prepare-deploy` reads it and only re-prompts on missing fields.
 
 ✅ **Checkpoint.** `agent-capabilities.yaml` exists with a populated `target:` block. The user has confirmed the discovered values.

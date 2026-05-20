@@ -126,7 +126,7 @@ Start at the [recipes index](foundry-agent-playbook/.apm/skills/foundry-agent-pl
 
 | Prompt | What to check |
 |---|---|
-| `/plan-agent name=foo description="…"` | Walks through pattern selection (Track A) or scaffolds a fresh agent under `agents/foo/` from `foundry-deploy/templates/` (Track B). |
+| `/plan-agent agent_name=foo description="…"` | Walks through pattern selection (Track A) or scaffolds a fresh agent under `agents/foo/` from `foundry-deploy/templates/` (Track B). |
 | `/troubleshoot symptom="container exits 1"` | Routes to `foundry-failure-modes` skill and surfaces the matching diagnosis. |
 | `/configure-rbac …` (dry-run) | Should print the `check-identities.sh` and `grant-rbac.sh` invocations it would run. |
 | `/configure-rbac post_publish=true …` | Re-fan mode — should skip Phase 1/2 and target `publish.application_identity_principal_id` instead of the project identity (requires `publish` block already populated by `/publish-teams`). |

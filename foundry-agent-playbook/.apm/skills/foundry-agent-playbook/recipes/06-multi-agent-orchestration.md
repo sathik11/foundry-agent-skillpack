@@ -121,12 +121,12 @@ Run `/plan-agent` once per agent. Give each its own directory and `agent-capabil
 
 ```bash
 # Orchestrator — calls siblings as tools, no business logic of its own
-/plan-agent name=feedback-orchestrator description="Coordinates a feedback-analysis pipeline. Calls harvester, sentiment, narrator siblings in order. Returns a synthesized customer-feedback report."
+/plan-agent agent_name=feedback-orchestrator description="Coordinates a feedback-analysis pipeline. Calls harvester, sentiment, narrator siblings in order. Returns a synthesized customer-feedback report."
 
 # Sub-agents
-/plan-agent name=feedback-harvester description="Pulls customer feedback rows from a data source for a given query window. Returns raw JSON records only."
-/plan-agent name=feedback-sentiment description="Classifies a list of feedback records as positive/negative/neutral with a 1-line rationale per record. Returns raw JSON records only."
-/plan-agent name=feedback-narrator description="Generates an executive summary from a list of scored feedback records. Returns markdown."
+/plan-agent agent_name=feedback-harvester description="Pulls customer feedback rows from a data source for a given query window. Returns raw JSON records only."
+/plan-agent agent_name=feedback-sentiment description="Classifies a list of feedback records as positive/negative/neutral with a 1-line rationale per record. Returns raw JSON records only."
+/plan-agent agent_name=feedback-narrator description="Generates an executive summary from a list of scored feedback records. Returns markdown."
 ```
 
 For each, accept defaults except:

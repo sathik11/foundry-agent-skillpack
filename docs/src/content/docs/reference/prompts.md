@@ -19,7 +19,15 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /plan-agent
 
-**Inputs:** `name`, `description`, optional `track` (A: pattern selection / B: scaffold from template).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_name` | ✓ | kebab-case, e.g. `learn-agent` |
+| `description` | ✓ | one-liner — what the agent does + which tools/data |
+| `operator_mode` | – | `true|false` (default `true`). Stamped into `agent-capabilities.yaml`; downstream prompts read it from there. Set `false` for SOC-monitored environments where unauthorized attempts trigger alerts. |
+
+**Skills referenced:** `foundry-patterns` · `foundry-deploy` · `foundry-multi-agent` · `foundry-guardrails` · `foundry-purview` · `foundry-teams-workiq` · `foundry-roles` (+ `foundry-agent-playbook` for recipe lookups).
 
 **Steps:**
 - **Step 0a** — Target discovery + caller-role preflight. Runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) to find account / project / ACR / model in one call; then [`preflight-roles.sh plan-agent`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for batch role check. Stamps `operator_mode: true` + `target:` block in `agent-capabilities.yaml`.
@@ -35,7 +43,15 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /prepare-deploy
 
-**Inputs:** `agent_path`, optional `resource_group` (override).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_path` | ✓ | e.g. `agents/learn-agent` |
+| `resource_group` | – | discovered from manifest `target:` if omitted |
+| `deep_network` | – | `true|false` (default `false`). Enables NSG / Azure Firewall / SEP walkers (TD-10 Layer 1). Adds 60–120s per source. Has no effect when `network.class == public`. |
+
+**Skills referenced:** `foundry-deploy` · `foundry-identity` · `foundry-roles` · `foundry-knowledge` · `foundry-fabric` · `foundry-guardrails` · `foundry-purview` · `foundry-teams-workiq` · `foundry-prod-readiness` · `foundry-failure-modes`.
 
 **Steps:**
 0. **Caller-role + target preflight (FAIL-FAST).** Reads `operator_mode` + `target:` from `agent-capabilities.yaml`; exports `OPERATOR_MODE` for downstream scripts. Only re-elicits on missing fields (runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) if needed). Batch role check via [`preflight-roles.sh prepare-deploy`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for `Contributor` on RG + `Azure AI Developer` on project.
@@ -52,7 +68,18 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /configure-rbac
 
-**Inputs:** `agent_path`, `agent_name`, optional `foundry_account`, `resource_group`, `subscription_id`, `post_publish` (default `false`).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_path` | ✓ | e.g. `agents/learn-agent` |
+| `agent_name` | ✓ | matches `agent.yaml` name |
+| `foundry_account` | – | discovered |
+| `resource_group` | – | discovered |
+| `subscription_id` | – | discovered |
+| `post_publish` | – | `true|false` (default `false`). When `true`, skips Phase 1/2 and re-fans Phase 3 against the published **application identity** instead of the project identity (run after `/publish-teams`). TD-2 close-out. |
+
+**Skills referenced:** `foundry-identity` · `foundry-roles` · `foundry-deploy` · `foundry-knowledge` · `foundry-fabric` · `foundry-guardrails` · `foundry-purview` · `foundry-teams-workiq`.
 
 **Steps:**
 1. Discover identities; stamp `identities` into status. *(skipped when `post_publish=true`)*
@@ -66,7 +93,15 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /verify-agent
 
-**Inputs:** `agent_name`, `test_query`, optional `agent_path` (enables per-capability verification).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_name` | ✓ | matches `agent.yaml` name |
+| `test_query` | ✓ | simple test message sent to the agent |
+| `agent_path` | – | enables per-capability post-deploy gates from `agent-capabilities.yaml` |
+
+**Skills referenced:** `foundry-deploy` · `foundry-observability` · `foundry-guardrails` · `foundry-purview` · `foundry-fabric` · `foundry-teams-workiq` · `foundry-failure-modes`.
 
 **Steps:**
 - **Step −1** Drift check (capability hash) — STOPs and asks user if drift detected.
@@ -83,7 +118,18 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /setup-evals
 
-**Inputs:** `agent_name`, optional `agent_path`, `agent_role`, `judge_model`, `include_scheduled`, `include_redteam`.
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_name` | ✓ | e.g. `my-agent-v3` |
+| `agent_path` | – | reads `agent-capabilities.yaml` for evaluator auto-selection |
+| `agent_role` | – | override: `orchestrator` \| `ingestion` \| `enrichment` \| `narrative` \| `prompt` |
+| `judge_model` | – | override judge model deployment |
+| `include_scheduled` | – | `true|false` (default `true`). Skips scheduled eval when `false` or when not declared in manifest. |
+| `include_redteam` | – | `true|false` (default `true`). Skips cloud red-team when `false`, not declared, or region unsupported. |
+
+**Skills referenced:** `foundry-evals` · `foundry-observability` · `foundry-guardrails` · `foundry-roles`.
 
 **Steps:**
 0. Role preflight (`Azure AI User` on project).
@@ -99,7 +145,13 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /setup-purview
 
-**Inputs:** `foundry_account`.
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `foundry_account` | ✓ | the Foundry AI Services account name where the Purview toggle is flipped |
+
+**Skills referenced:** `foundry-purview` · `foundry-guardrails`.
 
 **Steps:**
 1. Confirm tenant licensing (M365 E5 / Agent 365).
@@ -113,7 +165,16 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 
 ## /publish-teams
 
-**Inputs:** `agent_path`, `agent_name`, optional `bot_app_id`, `m365_admin_runbook_only` (default `false`).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_path` | ✓ | e.g. `agents/learn-agent` |
+| `agent_name` | ✓ | matches `agent.yaml` name |
+| `bot_app_id` | – | Bot Framework Entra app ID — discovered from `agent-capabilities.yaml` `workiq_teams.bot_app_id` if omitted |
+| `m365_admin_runbook_only` | – | `true|false` (default `false`). When `true`, skip publish + RBAC re-fan; only re-emit the M365 admin approval runbook from existing publish state. Useful if the admin lost the original message. |
+
+**Skills referenced:** `foundry-teams-workiq` · `foundry-identity` · `foundry-deploy` · `foundry-evals` · `foundry-purview` · `foundry-roles`.
 
 Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copilot. Handles both agent object models (new vs legacy) and — critically — the **identity flip** that happens at publish time: per MS Learn, tool calls authenticated by agent identity use the **application identity** after publishing, not the project identity. Pre-publish RBAC grants from `/configure-rbac` break silently unless re-fanned.
 
@@ -134,13 +195,33 @@ Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copil
 
 ## /troubleshoot
 
-**Inputs:** `symptom` (free text).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `symptom` | ✓ | free text — error message, HTTP code, or observed behavior |
+| `agent_name` | – | which agent is affected (helps narrow the lookup) |
+
+**Skills referenced:** `foundry-failure-modes`.
 
 **Routes** to the matching entry in [foundry-failure-modes](/skills/) and surfaces the one-line fix. Common entry points: `container exits 1`, `403 on first invoke`, `tool spans missing`, `model not found`, `version stuck creating`.
 
 ## /audit-drift
 
-**Inputs:** `agent_path`, `agent_name`, optional `subscription_id`, `resource_group`, `foundry_account`, `project_name`, `report_path`, `include_reverse_drift` (default `true`).
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `agent_path` | ✓ | e.g. `agents/learn-agent` |
+| `agent_name` | ✓ | matches `agent.yaml` name |
+| `subscription_id` | – | discovered |
+| `resource_group` | – | discovered |
+| `foundry_account` | – | discovered |
+| `project_name` | – | discovered |
+| `report_path` | – | default `.audit-reports/<agent_name>-<YYYY-MM-DD>.md` |
+| `include_reverse_drift` | – | `true|false` (default `true`). Scan for live state not declared in manifest. |
+
+**Skills referenced:** `foundry-deploy` · `foundry-identity` · `foundry-knowledge` · `foundry-prod-readiness` · `foundry-roles`.
 
 **Hard rule:** read-only. Never mutates Azure, Foundry, Purview, or `agent-capabilities.yaml`. The only writes are: (a) the markdown report file, (b) the `verify` block in `agent-status.json`.
 

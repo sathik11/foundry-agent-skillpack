@@ -60,7 +60,7 @@ After install you'll see:
 
 | You want to… | Run |
 |---|---|
-| Plan a new agent | `/plan-agent name=… description=…` |
+| Plan a new agent | `/plan-agent agent_name=… description=…` |
 | Run pre-deploy gates + `azd up` | `/prepare-deploy agent_path=agents/<name>` |
 | Apply base + capability RBAC after deploy | `/configure-rbac agent_path=agents/<name> agent_name=<name>` |
 | Smoke-test the deployed endpoint | `/verify-agent agent_name=<name> test_query="…" agent_path=agents/<name>` |

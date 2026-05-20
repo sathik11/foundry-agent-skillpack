@@ -32,7 +32,7 @@ Network: stay public for this recipe. Network class is documented separately in 
 ## Step 1 — Plan the agent (`/plan-agent`)
 
 ```
-/plan-agent name=hello-foundry description="Quickstart agent that answers Microsoft Learn questions via the public Learn MCP server."
+/plan-agent agent_name=hello-foundry description="Quickstart agent that answers Microsoft Learn questions via the public Learn MCP server."
 ```
 
 The prompt walks you through:

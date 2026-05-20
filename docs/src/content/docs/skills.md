@@ -3,7 +3,13 @@ title: Skills overview
 description: Every skill the skillpack ships, what each one is for, and where to find its source.
 ---
 
-The skillpack installs **15 engineering skills** + **1 fixtures-package skill** = 16 total. Each is a markdown router (`SKILL.md`) plus sub-docs and (where applicable) runnable scripts. Your coding agent loads the routers aggressively and treats sub-docs as on-demand reads.
+The skillpack installs **15 engineering skills** + **1 playbook-package skill** = 16 total. Each is a markdown router (`SKILL.md`) plus sub-docs and (where applicable) runnable scripts. Your coding agent loads the routers aggressively and treats sub-docs as on-demand reads.
+
+:::note[Skills are not slash commands]
+These **skills** are *knowledge* loaded as context (e.g. `foundry-deploy` ships scaffold templates + capability-manifest schema). They have no inputs and no steps. To **invoke** a workflow, use a **slash command** — e.g. `/plan-agent`, `/configure-rbac`, `/verify-agent`. See [Reference → Prompts](/reference/prompts/) for the 9 slash commands and their parameters, or [Install → Discovering the slash commands](/getting-started/install/#discovering-the-slash-commands) for the per-IDE discovery table.
+
+Naming convention: anything prefixed with `foundry-` is a skill; bare verbs (`plan-agent`, `verify-agent`, …) are prompts.
+:::
 
 Skill content is the canonical source — these pages link to it on GitHub for now. (Inline rendering in this site is on the roadmap.)
 
@@ -27,11 +33,11 @@ Skill content is the canonical source — these pages link to it on GitHub for n
 | **foundry-failure-modes** | Symptom → diagnosis matrix; routes from `/troubleshoot` | [SKILL.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-failure-modes/SKILL.md) |
 | **foundry-observability** | OTel spans, App Insights, KQL cookbook, token tracking | [SKILL.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-observability/SKILL.md) |
 
-## Fixtures-package skill
+## Playbook-package skill
 
 | Skill | Purpose |
 | --- | --- |
-| **foundry-agent-playbook** | Runnable fixtures + 6 end-to-end recipes — reference material; not loaded into agent context for normal use |
+| **foundry-agent-playbook** | Runnable sample agents + 6 end-to-end recipes — reference material; not loaded into agent context for normal use |
 
 ## Skill anatomy
 

@@ -24,7 +24,7 @@ The full step-by-step lives in **Recipe 01** inside the playbook package. After 
 ## What you'll run, in order
 
 ```text
-/plan-agent name=hello-foundry description="..."
+/plan-agent agent_name=hello-foundry description="..."
 /prepare-deploy agent_path=agents/hello-foundry
 azd up
 /configure-rbac agent_path=agents/hello-foundry agent_name=hello-foundry
