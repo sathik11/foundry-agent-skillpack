@@ -45,8 +45,9 @@ policy_rules_json="[]"
 policy_count=0
 if [[ -n "$policy_id" && "$policy_id" != "null" ]]; then
   # Enumerate all rule collection groups → collections → rules of type ApplicationRule.
+  # api-version pinned to current GA for Microsoft.Network/firewallPolicies/ruleCollectionGroups.
   groups=$(az rest --method get \
-    --uri "https://management.azure.com${policy_id}/ruleCollectionGroups?api-version=2024-05-01" \
+    --uri "https://management.azure.com${policy_id}/ruleCollectionGroups?api-version=2025-09-01" \
     -o json 2>/dev/null || echo '{"value":[]}')
   policy_rules_json=$(echo "$groups" | jq '[.value[].properties.ruleCollections[]?.rules[]? | select(.ruleType=="ApplicationRule")]')
   policy_count=$(echo "$policy_rules_json" | jq 'length')

@@ -28,9 +28,17 @@ An [APM](https://microsoft.github.io/apm/) package that gives your AI coding age
 
 ## 1. Prerequisites
 
-- [APM CLI](https://microsoft.github.io/apm/) ≥ 0.12 (`apm --version`)
-- A coding agent that respects one of the supported targets (Copilot, Claude, Cursor, Windsurf, OpenCode, Codex, Gemini)
-- An Azure subscription with a Foundry project (only when you actually deploy)
+Fresh laptop, macOS / Linux / WSL2 — one-liner:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sathik11/foundry-agent-skillpack/main/scripts/install-prereqs.sh | bash
+```
+
+Installs `az` (≥ 2.80), `jq`, `azd` (≥ 1.24) + `azd ai agent` extension, Python 3.12+. Checks `apm` separately (npm-based). Skips `az login` / subscription pick / RBAC (you must do those manually). Re-runnable.
+
+**Windows:** native PowerShell / Git Bash are **not supported as of v0.23.0** — use **WSL2** (`wsl --install`, then run the one-liner inside WSL). Native Windows via dual bash + PowerShell-7 siblings is under evaluation — see [TD-28](./TECHNICAL_DEBT.md#td-28--cross-os-script-runtime--bash--pwsh-dual-script-bake-off).
+
+Full per-tool prerequisites table, why-each-is-needed, and the "verify everything" one-liner: [docs → install → prerequisites](https://foundry-agent-skillpack.example.com/getting-started/install/#prerequisites).
 
 ## 2. Install
 

@@ -12,7 +12,7 @@ The per-agent identity is an `agent`-subtype Service Principal in Entra (post 20
 ```bash
 # Project MI
 PROJECT_MI=$(az rest --method get \
-  --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>?api-version=2025-04-01-preview" \
+  --uri "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>?api-version=2026-03-01" \
   --query identity.principalId -o tsv)
 
 # Per-agent

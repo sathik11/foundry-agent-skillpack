@@ -38,7 +38,8 @@ if (( ACCOUNT_COUNT == 0 )); then
   echo "[x] No Foundry / Cognitive Services accounts found in $RG." >&2
   echo "FOUNDRY_ACCOUNT_NAME="
 else
-  # Pick first account; list all if multiple
+  # Primary account = first by jq order. Existing un-suffixed keys are emitted
+  # from this account so downstream prompts keep working.
   ACCT_NAME=$(echo "$ACCOUNTS_JSON" | jq -r '.[0].name')
   ACCT_ID=$(echo "$ACCOUNTS_JSON" | jq -r '.[0].id')
   ACCT_KIND=$(echo "$ACCOUNTS_JSON" | jq -r '.[0].kind')
@@ -57,69 +58,122 @@ else
       echo "  $((i+1)). $N (kind: $K)" >&2
       echo "FOUNDRY_ACCOUNT_NAME_$((i+1))=$N"
     done
-    echo "[i] Using '$ACCT_NAME' (first). Override by passing to the prompt." >&2
+    echo "[i] Primary: '$ACCT_NAME'. Override by passing to the prompt." >&2
   fi
 
-  # --- 2. Project under the account ---
-  echo "[i] Discovering project under $ACCT_NAME..." >&2
-  # Projects are sub-resources: Microsoft.CognitiveServices/accounts/<name>/projects
-  PROJECTS_JSON=$(az rest --method GET \
-    --url "https://management.azure.com$ACCT_ID/projects?api-version=2024-10-01" \
-    2>/dev/null || echo '{"value":[]}')
-  PROJ_COUNT=$(echo "$PROJECTS_JSON" | jq '.value | length')
+  # --- 2 & 3. Projects + deployments — enumerated PER AIServices account ---
+  #
+  # Previously: only account [0] was queried, so multi-account RGs silently
+  # lost projects + deployments belonging to other accounts.
+  # Now: loop over every AIServices account. Emit un-suffixed primary keys
+  # from account [0] for contract compatibility, and per-account aggregate
+  # keys (ACCOUNT_<n>_PROJECT_NAMES / ACCOUNT_<n>_DEPLOYMENT_NAMES) for the
+  # rest so prompts can see the full surface.
+  #
+  # api-version: latest GA for Microsoft.CognitiveServices/accounts/projects
+  # (verified via `az provider show -n Microsoft.CognitiveServices`).
+  PROJECTS_API_VERSION="2026-03-01"
 
-  if (( PROJ_COUNT == 0 )); then
-    echo "[x] No projects found under $ACCT_NAME." >&2
-    echo "PROJECT_NAME="
-  else
-    PROJ_NAME=$(echo "$PROJECTS_JSON" | jq -r '.value[0].name')
-    PROJ_ID=$(echo "$PROJECTS_JSON" | jq -r '.value[0].id')
-    echo "PROJECT_NAME=$PROJ_NAME"
-    echo "PROJECT_ID=$PROJ_ID"
-    FOUND=$((FOUND + 1))
+  any_project_found=0
+  any_deployment_found=0
 
-    if (( PROJ_COUNT > 1 )); then
-      echo "[i] Multiple projects found ($PROJ_COUNT). Listing all:" >&2
-      for i in $(seq 0 $((PROJ_COUNT - 1))); do
-        N=$(echo "$PROJECTS_JSON" | jq -r ".value[$i].name")
-        echo "  $((i+1)). $N" >&2
-        echo "PROJECT_NAME_$((i+1))=$N"
-      done
-      echo "[i] Using '$PROJ_NAME' (first). Override by passing to the prompt." >&2
-    fi
+  for i in $(seq 0 $((ACCOUNT_COUNT - 1))); do
+    A_NAME=$(echo "$ACCOUNTS_JSON" | jq -r ".[$i].name")
+    A_ID=$(echo "$ACCOUNTS_JSON" | jq -r ".[$i].id")
+    A_KIND=$(echo "$ACCOUNTS_JSON" | jq -r ".[$i].kind")
 
-    # --- 3. Model deployments under the account ---
-    echo "[i] Discovering model deployments under $ACCT_NAME..." >&2
-    DEPLOYS_JSON=$(az cognitiveservices account deployment list \
-      -g "$RG" -n "$ACCT_NAME" --subscription "$SUB" -o json 2>/dev/null || echo "[]")
-    DEPLOY_COUNT=$(echo "$DEPLOYS_JSON" | jq 'length')
+    # Projects + agent-facing deployments only exist on AIServices accounts.
+    # Skip ContentSafety, OpenAI-only, etc.
+    [[ "$A_KIND" != "AIServices" ]] && continue
 
-    if (( DEPLOY_COUNT == 0 )); then
-      echo "[x] No model deployments found under $ACCT_NAME." >&2
-      echo "MODEL_DEPLOYMENT_NAME="
+    # --- Projects under this account ---
+    # Capture stderr so an api-version drift surfaces instead of being swallowed.
+    PROJ_RESP=$(az rest --method GET \
+      --url "https://management.azure.com${A_ID}/projects?api-version=${PROJECTS_API_VERSION}" \
+      2>&1) || PROJ_RC=$?
+    PROJ_RC=${PROJ_RC:-0}
+    if (( PROJ_RC != 0 )); then
+      echo "[!] Projects API failed for $A_NAME (rc=$PROJ_RC). Bump api-version or check RBAC." >&2
+      echo "    Response: $(echo "$PROJ_RESP" | head -c 240)" >&2
+      PROJECTS_JSON='{"value":[]}'
     else
-      DEP_NAME=$(echo "$DEPLOYS_JSON" | jq -r '.[0].name')
-      DEP_FORMAT=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.format // "unknown"')
-      DEP_MODEL=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.name // "unknown"')
-      DEP_VERSION=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.version // "unknown"')
-      echo "MODEL_DEPLOYMENT_NAME=$DEP_NAME"
-      echo "MODEL_DEPLOYMENT_FORMAT=$DEP_FORMAT"
-      echo "MODEL_NAME=$DEP_MODEL"
-      echo "MODEL_VERSION=$DEP_VERSION"
-      FOUND=$((FOUND + 1))
+      PROJECTS_JSON="$PROJ_RESP"
+    fi
+    unset PROJ_RC
+    PROJ_COUNT=$(echo "$PROJECTS_JSON" | jq '.value | length')
 
-      if (( DEPLOY_COUNT > 1 )); then
-        echo "[i] Multiple deployments found ($DEPLOY_COUNT). Listing all:" >&2
-        for i in $(seq 0 $((DEPLOY_COUNT - 1))); do
-          DN=$(echo "$DEPLOYS_JSON" | jq -r ".[$i].name")
-          DM=$(echo "$DEPLOYS_JSON" | jq -r ".[$i].properties.model.name // \"?\"")
-          echo "  $((i+1)). $DN (model: $DM)" >&2
-          echo "MODEL_DEPLOYMENT_NAME_$((i+1))=$DN"
-        done
-        echo "[i] Using '$DEP_NAME' (first). Override via agent-capabilities.yaml model.deployment_name." >&2
+    if (( i == 0 )); then
+      if (( PROJ_COUNT == 0 )); then
+        echo "[x] No projects under primary account $A_NAME." >&2
+        echo "PROJECT_NAME="
+      else
+        PROJ_NAME=$(echo "$PROJECTS_JSON" | jq -r '.value[0].name')
+        PROJ_ID=$(echo "$PROJECTS_JSON" | jq -r '.value[0].id')
+        echo "PROJECT_NAME=$PROJ_NAME"
+        echo "PROJECT_ID=$PROJ_ID"
+        any_project_found=1
+        if (( PROJ_COUNT > 1 )); then
+          echo "[i] Account $A_NAME has $PROJ_COUNT projects:" >&2
+          for j in $(seq 0 $((PROJ_COUNT - 1))); do
+            N=$(echo "$PROJECTS_JSON" | jq -r ".value[$j].name")
+            echo "  $((j+1)). $N" >&2
+            echo "PROJECT_NAME_$((j+1))=$N"
+          done
+          echo "[i] Primary: '$PROJ_NAME'. Override via prompt." >&2
+        fi
+      fi
+    else
+      # Non-primary account: emit aggregate key + log
+      if (( PROJ_COUNT > 0 )); then
+        NAMES=$(echo "$PROJECTS_JSON" | jq -r '[.value[].name] | join(",")')
+        echo "ACCOUNT_$((i+1))_PROJECT_NAMES=$NAMES"
+        echo "[i] Account $((i+1)) ($A_NAME) has $PROJ_COUNT project(s): $NAMES" >&2
+        any_project_found=1
       fi
     fi
-  fi
+
+    # --- Deployments under this account ---
+    DEPLOYS_JSON=$(az cognitiveservices account deployment list \
+      -g "$RG" -n "$A_NAME" --subscription "$SUB" -o json 2>/dev/null || echo "[]")
+    DEPLOY_COUNT=$(echo "$DEPLOYS_JSON" | jq 'length')
+
+    if (( i == 0 )); then
+      if (( DEPLOY_COUNT == 0 )); then
+        echo "[x] No model deployments under primary account $A_NAME." >&2
+        echo "MODEL_DEPLOYMENT_NAME="
+      else
+        DEP_NAME=$(echo "$DEPLOYS_JSON" | jq -r '.[0].name')
+        DEP_FORMAT=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.format // "unknown"')
+        DEP_MODEL=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.name // "unknown"')
+        DEP_VERSION=$(echo "$DEPLOYS_JSON" | jq -r '.[0].properties.model.version // "unknown"')
+        echo "MODEL_DEPLOYMENT_NAME=$DEP_NAME"
+        echo "MODEL_DEPLOYMENT_FORMAT=$DEP_FORMAT"
+        echo "MODEL_NAME=$DEP_MODEL"
+        echo "MODEL_VERSION=$DEP_VERSION"
+        any_deployment_found=1
+        if (( DEPLOY_COUNT > 1 )); then
+          echo "[i] Account $A_NAME has $DEPLOY_COUNT deployments:" >&2
+          for j in $(seq 0 $((DEPLOY_COUNT - 1))); do
+            DN=$(echo "$DEPLOYS_JSON" | jq -r ".[$j].name")
+            DM=$(echo "$DEPLOYS_JSON" | jq -r ".[$j].properties.model.name // \"?\"")
+            echo "  $((j+1)). $DN (model: $DM)" >&2
+            echo "MODEL_DEPLOYMENT_NAME_$((j+1))=$DN"
+          done
+          echo "[i] Primary: '$DEP_NAME'. Override via agent-capabilities.yaml model.deployment_name." >&2
+        fi
+      fi
+    else
+      if (( DEPLOY_COUNT > 0 )); then
+        NAMES=$(echo "$DEPLOYS_JSON" | jq -r '[.[].name] | join(",")')
+        echo "ACCOUNT_$((i+1))_DEPLOYMENT_NAMES=$NAMES"
+        echo "[i] Account $((i+1)) ($A_NAME) has $DEPLOY_COUNT deployment(s): $NAMES" >&2
+        any_deployment_found=1
+      fi
+    fi
+  done
+
+  (( any_project_found == 1 )) && FOUND=$((FOUND + 1))
+  (( any_deployment_found == 1 )) && FOUND=$((FOUND + 1))
 fi
 
 # --- 4. ACR ---

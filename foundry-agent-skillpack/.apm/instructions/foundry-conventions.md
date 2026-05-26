@@ -5,6 +5,10 @@ description: Coding standards and conventions for Foundry hosted agent developme
 
 # Foundry Agent Coding Conventions
 
+## Scope boundary — what this skillpack does NOT handle
+
+Deterministic per-tool-call policy enforcement (deny / allow / require_approval at runtime) is **out of scope** for this skillpack. For that, use [Microsoft Agent Governance Toolkit (AGT)](https://github.com/microsoft/agent-governance-toolkit) inside your agent container — it wraps tool functions and raises `GovernanceDenied` on disallowed actions. This skillpack owns deploy + lifecycle orchestration; AGT owns runtime enforcement. They are complementary layers, intended to be used together. First-class declarative integration lands in v0.24 (TD-29).
+
 ## SDK
 
 - Use `agent-framework>=1.2.2` + `agent-framework-foundry-hosting==1.0.0a260429`

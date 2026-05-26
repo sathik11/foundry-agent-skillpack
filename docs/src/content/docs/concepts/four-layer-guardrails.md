@@ -12,6 +12,14 @@ The skillpack ships a four-layer guardrail model. Each layer is independent — 
 | **2 — Azure Content Safety** | Violence / Hate / Sexual / SelfHarm severity | ~150ms | Azure managed |
 | **3 — Continuous eval + cloud red-team** | Quality + safety drift | hourly / nightly | Foundry-native |
 
+## Layer 0 — deterministic runtime enforcement (AGT, complementary)
+
+The four layers above cover content classification, drift detection, and capability provisioning. They do **not** cover *deterministic per-tool-call policy enforcement* — e.g. "this agent is structurally incapable of calling `drop_table`" or "every `send_email` requires human approval". That layer is owned by [Microsoft Agent Governance Toolkit (AGT)](https://github.com/microsoft/agent-governance-toolkit), which wraps each tool function in your agent container and raises `GovernanceDenied` on disallowed actions.
+
+AGT is effectively **Layer 0** — ordered before our Layer 1, runs first on every tool call. **Recommended posture: adopt and integrate.** Full positioning + integration plan: [Related work](/concepts/related-work/) and [TD-29 in TECHNICAL_DEBT.md](/technical-debt/).
+
+**Status today (v0.23.0):** AGT integration is documentation-only; first-class declarative integration (`runtime_governance: agt` in `agent-capabilities.yaml`, container `requirements.txt` injection, template `govern(...)` wraps) lands in v0.24.
+
 ## Why Layer 1.5 is unique
 
 M365 Copilot agents and Copilot Studio agents get **DLP enforcement built into the runtime** — block / warn / audit decisions on prompts and responses based on detected SITs and sensitivity labels. Foundry hosted agents do **not** get this for free.

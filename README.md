@@ -6,7 +6,7 @@
 [![APM](https://img.shields.io/badge/APM-package-blue)](https://microsoft.github.io/apm/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **v0.20.0 repo rename.** The GitHub repo was renamed from `Foundry-Hosted-Agent-Skill` to [`foundry-agent-skillpack`](https://github.com/sathik11/foundry-agent-skillpack) to match the primary package name. GitHub auto-redirects old URLs. The engineering package was previously renamed from `foundry-agent-harness` → `foundry-agent-skillpack` in v0.19.0; `aliases: [foundry-agent-harness]` still ships through this release (slated to drop in v0.23 — see [TD-19](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack)).
+> **v0.20.0 repo rename.** The GitHub repo was renamed from `Foundry-Hosted-Agent-Skill` to [`foundry-agent-skillpack`](https://github.com/sathik11/foundry-agent-skillpack) to match the primary package name. GitHub auto-redirects old URLs. The engineering package was previously renamed from `foundry-agent-harness` → `foundry-agent-skillpack` in v0.19.0; `aliases: [foundry-agent-harness]` still ships through this release (slated to drop in v0.24 — see [TD-19](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack)).
 
 📖 **[View the full documentation site →](https://foundry-agent-skillpack.example.com)** *(Azure Static Web Apps)*
 
@@ -19,6 +19,20 @@ Two installable APM packages plus a hosted documentation site:
 - **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 9 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
 - **`foundry-agent-playbook/`** — opt-in: 2 runnable samples (`learn-agent`, `langgraph-chat-sample`) and 6 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, APIM-fronted MCP, and multi-agent orchestration.
 - **`docs/`** — Astro Starlight site rendered to Azure Static Web Apps.
+
+## Prerequisites
+
+Fresh laptop? Run the one-liner. On macOS, Debian/Ubuntu, or WSL2 Ubuntu:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sathik11/foundry-agent-skillpack/main/scripts/install-prereqs.sh | bash
+```
+
+It detects what's installed, installs only what's missing, prints exactly what you must still do manually (`az login`, RBAC role check, subscription pick). Re-running is safe. Flags: `--dry-run`, `--no-python`, `--no-azd`.
+
+**Windows users:** the skillpack's scripts are bash. **Use WSL2** (`wsl --install`, then run the curl one-liner inside WSL). Native Windows support via PowerShell siblings is under evaluation — see [TD-28](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-28--cross-os-script-runtime--bash--pwsh-dual-script-bake-off). Git Bash is **not** supported (path-mangling + `python3` aliasing issues bite our scripts).
+
+What gets installed: `apm` (check only), `az` (≥ 2.80), `azd` (≥ 1.24) + `azd ai agent` extension, `jq`, `python3.12+`. Full per-tool justification: [docs → install → prerequisites](https://foundry-agent-skillpack.example.com/getting-started/install/#prerequisites).
 
 ## Install
 
@@ -69,6 +83,31 @@ After install you'll see:
 | Publish to Teams / M365 Copilot | `/publish-teams agent_path=agents/<name> agent_name=<name>` |
 | Diagnose a failure | `/troubleshoot symptom="…"` |
 | Read-only drift reconciliation | `/audit-drift agent_path=agents/<name> agent_name=<name>` |
+
+## How we fit alongside Microsoft Agent Governance Toolkit (AGT)
+
+[Microsoft Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) is the runtime governance layer for AI agents. This skillpack is the **deploy + lifecycle orchestration** layer for Foundry hosted agents. **They sit on different layers of the same stack and are intended to be used together** — AGT lists Azure AI Foundry as one of its supported deployment targets; we are the layer that gets Foundry agents deployed correctly before AGT wraps their tool calls at runtime.
+
+| Dimension | AGT (runtime middleware) | This skillpack (deploy + lifecycle) |
+|---|---|---|
+| **When in the lifecycle** | Inside the agent container, per tool call | Before `azd up` and across post-deploy operations |
+| **Distribution** | Library (`pip install agent-governance-toolkit[full]` — also npm / NuGet / cargo / go) | APM package consumed by coding agents (`apm install …`) |
+| **What it produces** | `GovernanceDenied` exception + Merkle audit record at runtime | Foundry `EvaluationRule` / `RedTeam` resources · APIM Bicep · Entra Agent ID · per-capability RBAC · `agent-status.json` · drift detection |
+| **Cloud** | Multi-cloud (Azure / AWS / GCP / Docker) | Foundry-specific |
+| **Framework** | 14+ adapters (MAF, Semantic Kernel, AutoGen, LangGraph, CrewAI, OpenAI Agents SDK, …) | Foundry-native + `agent-framework` + LangGraph BYO templates |
+| **Primary user** | Application developer writing agent code | DevOps / AI engineer deploying + governing agents on Foundry |
+| **Identity model** | SPIFFE / DID / mTLS (cross-cloud zero-trust primitive) | Entra Agent ID + Foundry project/agent/application identity flip + per-capability RBAC dispatcher |
+| **What it does NOT do** | Provision Azure resources · grant RBAC · configure Foundry capabilities · orchestrate Teams publish | Intercept tool calls at runtime · enforce per-action policy · provide cross-framework / cross-cloud SDK |
+
+**Adopt-and-integrate plan (tracked under [TD-29](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-29--agt-runtime-governance-as-a-declarable-layer-open---v024-candidate)):**
+
+- A future `agent-capabilities.yaml` will accept `runtime_governance: agt` as a declarable layer alongside the existing `middleware` / `content_safety` / `purview_dlp` / `redteam_evals` options.
+- When declared, `/prepare-deploy` injects `agent-governance-toolkit[full]` into the agent's container `requirements.txt`, the skillpack's agent templates wrap declared tool functions with `govern(...)`, and the Foundry-native eval rules we provision cross-link to AGT policy decisions through OTel spans.
+- `foundry-guardrails` skill will cross-reference AGT as the recommended runtime layer for tool-call governance (today our guardrails layers cover content safety + DLP, not arbitrary action policy).
+
+**Use both when:** you want Foundry-native eval/RBAC/identity orchestration (this skillpack) *and* deterministic per-tool-call deny + tamper-evident audit at runtime (AGT). This is the recommended posture for production Foundry hosted agents.
+
+More detail + the OWASP positioning split: [docs → Related work](https://foundry-agent-skillpack.example.com/concepts/related-work/).
 
 ## What runs in your tenant vs. ours
 

@@ -12,8 +12,10 @@ PROJECT="${4:?}"
 AGENT="${5:?}"
 
 echo "[+] Project MI..."
+# api-version pinned to latest GA (2026-03-01) per Microsoft.CognitiveServices/accounts/projects.
+# Bump when a newer GA ships and is verified in ARM (`az provider show -n Microsoft.CognitiveServices`).
 PROJECT_MI=$(az rest --method get \
-  --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACCOUNT/projects/$PROJECT?api-version=2025-04-01-preview" \
+  --uri "https://management.azure.com/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACCOUNT/projects/$PROJECT?api-version=2026-03-01" \
   --query identity.principalId -o tsv)
 
 if [[ -z "$PROJECT_MI" || "$PROJECT_MI" == "null" ]]; then

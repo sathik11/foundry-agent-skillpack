@@ -84,6 +84,7 @@ When a bug is reported, jump to the owning area first.
 | Purview DLP middleware / classify call wrong | `foundry-agent-skillpack/.apm/skills/foundry-guardrails/scripts/purview_dlp_middleware.py` (TD-4) |
 | Per-agent durable state corrupt | `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/agent_status.py` + `agent-status-schema.md` |
 | Brownfield code scan miss | `foundry-agent-skillpack/.apm/skills/foundry-knowledge/scripts/scan_knowledge_refs.py` (TD-13 — regex-only by design) |
+| `az rest` returns `InvalidResourceType` / 404 / empty result where the resource clearly exists | api-version is stale or never GA — search `grep -rn 'api-version=' .apm/` to find every pin, verify each against `az provider show -n <namespace> --query "resourceTypes[?resourceType=='<type>'].apiVersions"`. See TD-24 for the audit table and TD-27 for the registry plan. |
 | Capability manifest ↔ live world drift report wrong | `foundry-agent-skillpack/.apm/prompts/audit-drift.prompt.md` (no scripts; pure prompt) |
 | Recipe instructions stale | `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/0{1..6}-*.md` — bump `validity_date` after fix |
 | Sample (`learn-agent` / `langgraph-chat-sample`) won't deploy | `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/samples/<name>/` |
@@ -104,6 +105,7 @@ These are non-negotiable boundaries — a bug fix that crosses any of these is t
 6. **Eval audit trail lives in Foundry**, not in sideband CI artifacts. Wrappers call `azure-ai-projects` SDK so rules are visible in the Foundry portal.
 7. **Runbook-emit, don't escalate.** When a script lacks rights for an action (e.g., Fabric workspace role assign — TD-1), emit a paste-ready runbook for a privileged human. Never silently fail; never request elevation in-band.
 8. **Reserved env-var prefixes** (`FOUNDRY_*`, `AGENT_*`, `APPLICATIONINSIGHTS_*`) cause the platform to return 400. Use a project prefix in examples / templates.
+9. **api-versions must be pinned to current GA and verified on touch.** Any `az rest --method ... --uri "...?api-version=<X>"` call (in a script OR prose example) must use the latest GA api-version for that resource type. Preview versions (`-preview` suffix) are only acceptable when the feature has no GA yet (call this out in a sibling comment / md note). When you edit ANY file that contains an `api-version=` string, verify the pin is still current: `az provider show -n <namespace> --query "resourceTypes[?resourceType=='<type>'].apiVersions" -o tsv | head -5`. Never wrap an `az rest` call in `|| echo '{"value":[]}'` or `|| echo "[]"` without also capturing stderr to a log line — that pattern silently swallows api-version drift errors (the TD-24 class of bug). See TD-24 (4 versions bumped, audit table) and TD-27 (proposed central registry).
 
 ## Procedure — fixing a reported issue
 
@@ -185,7 +187,25 @@ Both packages version independently. Bumping fixtures rarely requires bumping th
 - ❌ A `SKILL.md` that grew past ~50 lines — split into sub-docs.
 - ❌ A new sub-doc nobody links to from a `SKILL.md` task table — the agent will never load it.
 - ❌ A "fix" that swallows an error a script previously raised — runbook-emit, don't silently pass.
+- ❌ An `az rest --uri "...?api-version=YYYY-MM-DD[-preview]"` call where the version is more than ~12 months old, or `-preview` when a GA exists, or wrapped in `|| echo '[]'` without stderr capture. Verify every api-version touched against `az provider show -n <ns>` and prefer the latest GA. (See invariant #9 and TD-24.)
 - ❌ Closing a TD entry by deleting it — strikethrough + `(CLOSED in vX.Y.Z)` is the convention.
+- ❌ "Updating" SDK call shapes, REST schemas, or service behavior based on training-data memory instead of looking it up. The skillpack must reflect today's reality, not what was true at training cutoff. See § Authoritative sources for the routing table.
+
+## Authoritative sources — where to verify before you write
+
+The skillpack ships into long-lived consumer installs, so any factual claim it makes (SDK call shapes, REST api-versions, service behavior, RBAC requirements) must be verified against a primary source on each touch. Never rely on training-data recall.
+
+| When you're verifying… | Use this source | Why |
+|---|---|---|
+| ARM control-plane api-versions (`az rest --uri "...?api-version=…"`) | `az provider show -n <namespace> --query "resourceTypes[?resourceType=='<type>'].apiVersions" -o tsv` | Live source of truth. ARM rejects unsupported versions; this is what your shipped script will hit at runtime. See TD-24 / invariant #9. |
+| Foundry / Azure AI service behavior, SDK call shapes, REST data-plane (`*.services.ai.azure.com/...`), Bot Service, AI Search, Cognitive Services, Purview, Content Safety, APIM policy schema | **`microsoft_docs_search`** then **`microsoft_docs_fetch`** (Microsoft Learn MCP) | Microsoft Learn is the canonical Microsoft doc surface and reflects current product behavior including breaking changes. Search first to find the right page, fetch to read the section verbatim. |
+| Third-party library / SDK / framework surface (e.g., `azure-ai-projects`, `azure-identity`, `azure-search-documents`, `langgraph`, `langchain`, `pydantic`, `httpx`) | **`mcp_context7_resolve-library-id`** then **`mcp_context7_query-docs`** | Context7 indexes upstream library docs at their current published version — closer to "as of today" than training data, including for well-known libraries. |
+| KQL operators, App Insights schema, Log Analytics queries | `microsoft_docs_search` for narrative; for syntax, the IntelliSense surface in App Insights / Log Analytics itself is fine to cite | Microsoft Learn covers the operator catalog. |
+| MCP server capabilities the skillpack invokes (`mcp_foundry_*`, `mcp_azure_mcp_*`) | The deferred-tool registry surfaced in the agent's runtime context (and the actual tool schemas when loaded). Cross-check against `microsoft_docs_search "foundry mcp <action>"` for narrative docs. | Tool surfaces drift faster than training data; ground in the live schema, not memory. |
+| Behavior of `az`, `azd`, or `apm` CLIs (subcommand existence, flag names, output schema) | Run the command with `--help` in a terminal during the same session | Avoid the "does `az foo list` actually exist?" failure mode. Verify before you write it into a script or prose. |
+| Skillpack's own internal contracts (`agent-capabilities.yaml` schema, `agent-status.json` schema, prompt step numbering) | Files in this repo only — `.apm/skills/foundry-deploy/{capabilities-manifest,agent-status-schema}.md` are the single source | Never paraphrase the schema from memory; open the file. |
+
+**Rule of thumb:** if a factual claim in your edit could be wrong six months from now because Microsoft or an upstream library changed, it needs a primary-source citation in a code comment or sibling `.md` note — and you must have verified it via the matching source above before landing.
 
 ## Quick reference — key files
 

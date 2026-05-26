@@ -7,21 +7,63 @@ The skillpack ships as **two opt-in APM packages**. Most consumers install both;
 
 ## Prerequisites
 
-| Tool | Minimum | Why |
+### Quickest path — one-liner installer (macOS / Linux / WSL2)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sathik11/foundry-agent-skillpack/main/scripts/install-prereqs.sh | bash
+```
+
+Detects your OS, installs only what's missing, prints exactly what you must still do manually. Re-running is safe.
+
+| Flag | Use when |
+|---|---|
+| `--dry-run` | Show what would happen, install nothing |
+| `--no-python` | You manage Python with pyenv/asdf/conda |
+| `--no-azd` | You only run caller-side eval/audit scripts, never `azd up` |
+
+### Full prerequisites table
+
+| Tool | Minimum | Why (audited usage) |
 | --- | --- | --- |
-| [APM CLI](https://microsoft.github.io/apm/) | `0.12` | Installs the packages |
-| [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) | `2.80` | All `az` commands the skillpack invokes |
-| [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) | `1.24` | Required for `azd up` |
-| `azd ai agent` extension | latest | `azd extension install azure.ai.agents` |
-| Python | `3.12+` | Local dev, smoke tests, and the eval / DLP wrappers |
-| `jq` | any | Identity discovery + network detection scripts |
-| Coding agent | Copilot Chat / Claude Code / Cursor / Windsurf | To run the slash commands |
+| **`bash`** | 4.0+ | Every `.apm/skills/*/scripts/*.sh` is `#!/usr/bin/env bash`. Windows → use **WSL2** (see below). |
+| [APM CLI](https://microsoft.github.io/apm/) | `0.12` | Installs the packages. ≥ 0.12 specifically — no longer auto-defaults `targets:` |
+| [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) | `2.80` | **79 invocations** across scripts. ≥ 2.80 because the api-versions bumped in v0.23.0 (`2026-03-01`, `2025-09-01`) need recent provider metadata |
+| **`jq`** | any | **104 invocations** — every script parses `az` JSON through `jq` |
+| **`az login` + active subscription** | n/a | Every `az` call assumes auth context. Fresh laptop → `az login` then `az account set --subscription <id>` |
+| **Reader role at RG scope** (caller-side) | n/a | Even read-only `discover-target.sh` returns empty results without Reader — looks like "nothing exists" (this is the TD-24 silent-failure class) |
+| [Azure Developer CLI (`azd`)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd) | `1.24` | Required for `azd up` — skip if you only run eval/audit |
+| `azd ai agent` extension | latest | `azd extension install azure.ai.agents` — owns image build + agent create + version create |
+| **Python** | `3.12+` | Eval / DLP / agent_status wrappers (9 `.py` files) |
+| Coding agent | Copilot Chat / Claude Code / Cursor / Windsurf / Codex / Gemini / OpenCode | To run the slash commands |
 
 For the eval / DLP wrappers, also:
 
 ```bash
 pip install "azure-ai-projects>=2.0.0,<3" azure-identity pyyaml httpx
 ```
+
+### Verify everything in one go
+
+```bash
+apm --version            # >= 0.12
+az --version | head -1   # >= 2.80
+azd version              # >= 1.24 (if deploying)
+jq --version
+python3 --version        # >= 3.12 (if running eval/DLP wrappers)
+az account show          # confirms az login + active subscription
+```
+
+### Windows users — read this first
+
+The skillpack is **bash-only as of v0.23.0**. Native Windows (PowerShell / cmd) cannot run the scripts. Two paths:
+
+| Path | Setup | Status |
+|---|---|---|
+| **WSL2 + Ubuntu** ⭐ recommended | `wsl --install`, open VS Code with WSL Remote extension; integrated terminal defaults to bash; run the curl one-liner inside WSL | **Supported** |
+| **Git Bash** | Install Git for Windows; set VS Code default terminal to `Git Bash` | **Not supported** — works for trivial scripts but bites on path mangling, `python3` aliasing, and process substitution in our multi-line `jq` pipelines |
+| **Native PowerShell** | n/a | **Not supported today.** Dual bash + PowerShell-7 sibling scripts are under formal evaluation — see [TD-28 → cross-OS script runtime bake-off](/technical-debt/) |
+
+**Setting WSL2 as your VS Code terminal:** `Ctrl+Shift+P` → `Terminal: Select Default Profile` → choose `Ubuntu (WSL)`. Then every Copilot-invoked script runs in bash.
 
 ## Two dependency surfaces — don't mix them
 

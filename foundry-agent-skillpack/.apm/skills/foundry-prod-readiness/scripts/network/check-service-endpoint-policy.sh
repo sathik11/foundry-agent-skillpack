@@ -55,8 +55,9 @@ echo "  SEP count: $sep_count" >&2
 while IFS= read -r sep_id; do
   [[ -z "$sep_id" || "$sep_id" == "null" ]] && continue
   sep_name=$(basename "$sep_id")
+  # api-version pinned to current GA for Microsoft.Network/serviceEndpointPolicies.
   defs=$(az rest --method get \
-    --uri "https://management.azure.com${sep_id}?api-version=2024-05-01" \
+    --uri "https://management.azure.com${sep_id}?api-version=2025-07-01" \
     --query "properties.serviceEndpointPolicyDefinitions[].{service:service, resources:serviceResources}" \
     -o json 2>/dev/null || echo "[]")
   echo "  ── $sep_name ──" >&2

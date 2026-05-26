@@ -1,5 +1,42 @@
 name: foundry-agent-skillpack
-version: 0.22.0
+version: 0.23.0
+# v0.23.0:
+#   - Closes TD-24: api-version drift in `az rest` calls. Bumps 5 stale/preview
+#     api-versions to current GA (discover-target, check-identities,
+#     check-service-endpoint-policy, deep-walk-firewall, two-identities.md).
+#     Replaces silent `|| echo '[]'` swallow in discover-target with explicit
+#     stderr capture so future drift surfaces instead of returning empty.
+#   - Closes TD-25: discover-target.sh enumerated sub-resources only for
+#     account[0]. Per-account loop now emits `ACCOUNT_<n>_PROJECT_NAMES=` /
+#     `ACCOUNT_<n>_DEPLOYMENT_NAMES=` for accounts [1..N]. Verified on a
+#     3-account RG: projects 0→2, deployments 8→19, status partial→complete.
+#   - Opens TD-26 (Resource Graph hybrid for discover-target — PoC verified
+#     4× faster) and TD-27 (central api-version registry + shared error
+#     helper) as preventive follow-ons.
+#   - Maintainer-side: foundry-skillpack-builder skill gains invariant #9
+#     (api-version pinning rule), authoritative-sources routing table
+#     (context7 + Microsoft Learn MCP + `az provider show`), and matching
+#     anti-pattern entries.
+#   - Fresh-laptop install: ships scripts/install-prereqs.sh at repo root
+#     (macOS / Linux / WSL2; auto-detects pkg mgr; --dry-run / --no-python /
+#     --no-azd flags; prints "next steps" the script cannot do: az login,
+#     subscription pick, RBAC role check). README + docs/install.md +
+#     skillpack README now cover prereqs, Windows guidance (WSL2 supported,
+#     Git Bash unsupported), and the one-liner curl install.
+#   - Opens TD-28 (cross-OS script runtime — bash + pwsh dual-script bake-off,
+#     v0.24 candidate). Includes parity-test harness design (mocked `az` +
+#     golden fixtures + CI gate on ubuntu/macos/windows) so drift surfaces at
+#     PR time, not production-failure time.
+#   - Positioning: new "How we fit alongside Microsoft Agent Governance
+#     Toolkit (AGT)" section in root README + dedicated docs page
+#     `concepts/related-work.md` with the two-layer model, dimension-by-
+#     dimension comparison, vocabulary-overlap map, OWASP Agentic Top 10
+#     split across both layers, and the adopt-and-integrate stance.
+#   - Opens TD-29 (AGT as declarable `runtime_governance: agt` layer in
+#     agent-capabilities.yaml — v0.24 candidate). Stated posture: adopt and
+#     integrate, not compete. AGT is runtime middleware; we are deploy+
+#     lifecycle orchestration. They are complementary layers of the same
+#     stack and intended to be used together for production Foundry agents.
 # v0.22.0:
 #   - Closes TD-23: inbound firewall coverage for Teams / M365 Copilot → private
 #     Foundry agent. Ships foundry-teams-workiq/inbound-firewall.md +

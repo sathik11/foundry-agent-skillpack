@@ -4,7 +4,7 @@ Tracked gaps and trade-offs in the foundry-agent-skillpack APM package. Each ent
 
 > **Rename history:**
 > - **v0.18.0 (May 2026):** package renamed from `foundry-agent-engineering` → `foundry-agent-harness`.
-> - **v0.19.0 (May 2026):** package renamed from `foundry-agent-harness` → `foundry-agent-skillpack`. `aliases: [foundry-agent-harness]` ships from v0.19.x through v0.22.0; slated to drop in v0.23. See [TD-19](#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack).
+> - **v0.19.0 (May 2026):** package renamed from `foundry-agent-harness` → `foundry-agent-skillpack`. `aliases: [foundry-agent-harness]` ships from v0.19.x through v0.23.0; slated to drop in v0.24. See [TD-19](#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack).
 >
 > Prior TD entries reference older names in commit history; the package contents are continuous. See [`ROADMAP.md`](../ROADMAP.md) for sequencing.
 
@@ -300,7 +300,7 @@ What it deliberately doesn't do:
 
 The GitHub repo was also renamed from `Foundry-Hosted-Agent-Skill` to `foundry-agent-skillpack` in v0.20.0. GitHub auto-redirects old URLs, so existing clone URLs, raw-file links, and PR/issue history continue to work.
 
-**Close-out:** Remove the `aliases:` line from `foundry-agent-skillpack/apm.yml` in v0.23 (deferred past v0.22.0 so the alias survives the TD-23 close-out release). Bump major-or-minor per usual policy. Add a final-warning note to the release notes pointing here.
+**Close-out:** Remove the `aliases:` line from `foundry-agent-skillpack/apm.yml` in v0.24 (deferred past v0.23.0 so the alias survives the TD-24/25 close-out release). Bump major-or-minor per usual policy. Add a final-warning note to the release notes pointing here.
 
 ## ~~TD-23 — Inbound firewall coverage for Teams / M365 Copilot → private Foundry agent~~ **(CLOSED in v0.22.0)**
 
@@ -328,4 +328,213 @@ The GitHub repo was also renamed from `Foundry-Hosted-Agent-Skill` to `foundry-a
 - ✅ `networking.md` Bot Service asymmetry callout + reply-path allowlist entries
 - ✅ `network-troubleshooter.md` symptom triage entry
 - ✅ `foundry-failure-modes/SKILL.md` F-20 + quick-triage row
+
+## ~~TD-24 — api-version drift in `az rest` calls~~ **(CLOSED in v0.23.0)**
+
+**Original gap:** Three `az rest --method get` calls in scripts and one in prose were pinned to api-versions that ARM no longer accepts (or that were never GA). The dominant failure pattern was `--query` / `--uri` calls wrapped in `|| echo '{"value":[]}'` so an ARM `Not Found(InvalidResourceType)` response was silently rewritten to an empty result, never surfaced to the operator.
+
+| File:line | Pinned (before) | ARM verdict | Bumped to |
+|---|---|---|---|
+| [discover-target.sh:67](.apm/skills/foundry-deploy/scripts/discover-target.sh) | `2024-10-01` | ❌ rejected (`accounts/projects` resource type not in that api-version's manifest) | `2026-03-01` (current GA) |
+| [check-identities.sh:16](.apm/skills/foundry-identity/scripts/check-identities.sh) | `2025-04-01-preview` | ⚠ preview pin (still works but unstable) | `2026-03-01` (current GA) |
+| [check-service-endpoint-policy.sh:59](.apm/skills/foundry-prod-readiness/scripts/network/check-service-endpoint-policy.sh) | `2024-05-01` | ⚠ 1-year-old GA | `2025-07-01` (current GA) |
+| [deep-walk-firewall.sh:49](.apm/skills/foundry-prod-readiness/scripts/network/deep-walk-firewall.sh) | `2024-05-01` | ⚠ 1-year-old GA (`firewallPolicies/ruleCollectionGroups` latest is 2025-09-01) | `2025-09-01` (current GA) |
+| [two-identities.md:15](.apm/skills/foundry-identity/two-identities.md) (prose) | `2025-04-01-preview` | ⚠ preview pin in copy-paste example | `2026-03-01` (current GA) |
+
+Verification: `az provider show -n Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts/projects'].apiVersions"` was the source-of-truth for the bumps. The discover-target.sh failure was reproduced on a live RG (returned blank `PROJECT_NAME=`), then verified fixed end-to-end (now returns the correct project).
+
+**Why this kept slipping:** `|| echo '{"value":[]}'` and `2>/dev/null || echo "[]"` are everywhere in these scripts. They're defensible (discovery should be best-effort, no crash on a missing sub-resource), but they also swallow api-version drift errors that look identical to "the resource doesn't exist." See TD-27 for the structural prevention.
+
+**Close-out completed:**
+- ✅ 4 api-version bumps landed (3 scripts + 1 prose)
+- ✅ discover-target.sh now captures stderr explicitly: on `az rest` non-zero exit, logs `[!] Projects API failed for <acct> (rc=N). Bump api-version or check RBAC.` followed by the first 240 chars of the response — visible failure mode instead of silent empty-result
+- ✅ Verified against a live multi-account RG: `DISCOVERY_STATUS=complete`, project + deployments correctly returned
+
+**Out of scope (tracked separately):** the other two scripts still use the silent `|| echo '[]'` pattern. Whether to convert them to the explicit-stderr-capture pattern is TD-27's call (a registry of api-versions would let us source the version + have a single error-handling helper).
+
+## ~~TD-25 — `discover-target.sh` enumerated sub-resources only for account [0]~~ **(CLOSED in v0.23.0)**
+
+**Original gap:** Inside the `if (( ACCOUNT_COUNT > 0 ))` branch, the script pulled `jq -r '.[0].name'` for the primary account and then queried projects + deployments **only** for that account. Accounts [1..N] were emitted as `FOUNDRY_ACCOUNT_NAME_2=`, `_3=` (name-only) but their sub-resources were never enumerated.
+
+Failure mode (reproduced on `agents-3iq`, 3 accounts in one RG):
+
+| | Ground truth | Script reported (before) | After fix |
+|---|---|---|---|
+| Projects | 2 (one per AIServices account) | 0 (combined with TD-24 silent failure) | 2 ✓ |
+| Deployments | 19 (16 in eastus2, 3 in ncus-2) | 8 (acct #0 only) | 19 ✓ |
+| `DISCOVERY_STATUS` | — | `partial` | `complete` |
+
+**Close-out completed:**
+- ✅ Replaced the single-account block with a `for i in $(seq 0 $((ACCOUNT_COUNT - 1)))` loop that iterates every AIServices account (`ContentSafety`, `OpenAI`-only, etc. are skipped — they don't have projects or agent-facing deployments)
+- ✅ Account [0] still emits the un-suffixed primary keys (`FOUNDRY_ACCOUNT_NAME=`, `PROJECT_NAME=`, `MODEL_DEPLOYMENT_NAME=`) so downstream prompts keep working without changes
+- ✅ Accounts [1..N] emit aggregate keys `ACCOUNT_<n>_PROJECT_NAMES=p1,p2` and `ACCOUNT_<n>_DEPLOYMENT_NAMES=d1,d2,d3` plus a stderr summary
+- ✅ Bug-side effect of the previous nesting also fixed: deployments enumeration was previously nested inside the "project found" branch, so an account with deployments but no projects skipped deployment discovery entirely
+
+**Trade-off:** Discovery is ~3s slower per additional AIServices account (the new per-account `az rest` + `az cognitiveservices account deployment list` calls run sequentially). On our 2-account test RG: 5.5s → 8.5s. TD-26 (Resource Graph hybrid) recovers this and goes faster than baseline.
+
+## TD-26 — Resource Graph hybrid for `discover-target.sh` (OPEN — preventive)
+
+**What:** `discover-target.sh` makes 4 sequential ARM round trips today (account list, projects REST, deployments list, ACR list). TD-25's per-account loop multiplies the projects + deployments calls by the number of AIServices accounts in the RG. A single `az graph query` against the `Resources` table can return accounts + projects + ACRs in one round trip with no api-version pin (ARG schema is centrally managed → eliminates the TD-24 class of bug for these three resource types).
+
+**Verified via live PoC** (May 2026, against `agents-3iq`):
+
+| Approach | Time | Round trips | Notes |
+|---|---|---|---|
+| Today (post-TD-25) | 8.5s | 1 + 2×(projects + deployments) sequential | correctness ✓, perf hit on multi-account RGs |
+| Hybrid ARG + parallel fan-out | **2.0s** | 1 ARG query + N parallel `account deployment list` | 4.2× faster than current, 2.7× faster than pre-TD-25 baseline |
+
+**Hard finding — ARG does NOT index everything:**
+- ✓ indexed: `microsoft.cognitiveservices/accounts`, `accounts/projects`, `microsoft.containerregistry/registries`
+- ✗ NOT indexed: `microsoft.cognitiveservices/accounts/deployments` (confirmed: ARG returned 0 globally despite 19 existing). Deployments still need one `az cognitiveservices account deployment list` per discovered AIServices account — fan-out in parallel with `&` + `wait`.
+
+**Why not landed in v0.23.0:**
+1. Requires the `resource-graph` az extension (not installed by default — verified on a clean machine). One-time `az extension add -n resource-graph` (~5s). Modern `az` auto-installs on first use, but corp policy can block extension install entirely. **Needs a fallback path to today's sequential `az` calls**, and that fallback must be verified on a tenant where extensions are policy-denied before we ship.
+2. ARG is eventually consistent (~minutes after a fresh provisioning). For brownfield discovery this is non-issue; for post-`azd up` verification it can race. Fallback path also covers this.
+3. The recently-shipped per-account loop (TD-25) is correct, just slower. Bug fix before performance fix.
+
+**Close-out plan:**
+- Add `_ensure_resource_graph()` helper to script: `az extension show -n resource-graph || az extension add -n resource-graph --only-show-errors`. On failure, set `USE_ARG=0` and log one line.
+- One ARG query returns accounts + projects + ACRs in normalized form.
+- Per-account parallel `az cognitiveservices account deployment list` calls (already in TD-25 just sequential — change `&` + `wait`).
+- Preserve every emitted KEY=VALUE so downstream prompts don't break.
+- No flag, no opt-in. ARG path is default; fallback is silent-on-success / one-stderr-line-on-fail.
+
+## TD-27 — No central registry of api-versions (OPEN — preventive)
+
+**What:** TD-24 fixed 4 silent-drift bugs that all stemmed from the same anti-pattern: api-version strings hand-written inline in `az rest --uri` calls, with errors caught by `|| echo '{"value":[]}'`. The fix bumped the strings; the structural problem (next year's GA bumps will silently re-introduce drift) stayed.
+
+**Proposal:** A single sourced shell file with named constants — e.g. [.apm/scripts/_api-versions.sh](.apm/scripts/_api-versions.sh) (new):
+
+```bash
+# Last verified: 2026-05-25 via `az provider show -n <ns> --query resourceTypes`
+export API_COGSVC_PROJECTS="2026-03-01"
+export API_NETWORK_SERVICE_ENDPOINT_POLICIES="2025-07-01"
+export API_NETWORK_FIREWALL_POLICY_RCG="2025-09-01"
+export API_FOUNDRY_AGENTS_DATAPLANE="2025-05-01"
+export API_SEARCH_DATAPLANE="2024-07-01"
+export API_SEARCH_KNOWLEDGEBASES="2025-11-01-preview"  # preview-only feature, no GA yet
+```
+
+Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo '[]'` with explicit stderr logging of the ARM error (the pattern TD-24's discover-target.sh fix introduced).
+
+**Why not landed now:** Five scripts is below the threshold where the indirection cost wins. A registry pays off once we add the 6th or 7th `az rest` call (e.g. when TD-26 lands or when future skills add new ARM calls). Tracked here so we don't accidentally add a 6th hand-pinned api-version.
+
+**Verification gate:** Add a CI step (or a `make verify-api-versions` target) that runs `az provider show -n <namespace>` for each constant and warns if the pinned version is no longer in the supported list. Catches future ARM deprecations before they hit operators.
+
+**Out of scope:** Foundry data-plane and Search data-plane versions live in a different versioning track (service endpoints, not ARM RPs). They need their own verification — `microsoft_docs_search` queries against MS Learn, or a known-good probe call.
+
+## TD-28 — Cross-OS script runtime — bash + pwsh dual-script bake-off (OPEN)
+
+**What:** Every `.apm/skills/*/scripts/*.sh` in the skillpack is bash-only (28+ scripts, ~79 `az` invocations, ~104 `jq` invocations). Native Windows (PowerShell / cmd) cannot run them. Today's only Windows path is WSL2; Git Bash partially works but bites on path mangling, `python3` aliasing, and process substitution in multi-line `jq` pipelines.
+
+**Why this is debt:** Foundry is a Microsoft product; the customer base skews Windows-enterprise. A skillpack that requires WSL2 for first use is architectural debt, not just a docs problem. Microsoft Learn itself maintains thousands of dual bash/pwsh code snippets — there is a working precedent we are not following.
+
+**Why deferred from v0.23.0:** Needs a real bake-off, not a guess. v0.23.0 shipped the install script for the supported (macOS / Linux / WSL2) path and documented the gap honestly.
+
+**Three options considered:**
+
+| Option | Why considered | Why rejected for now |
+|---|---|---|
+| A. Parallel `.sh` + `.ps1` (this TD) | Native each OS · mirrors Microsoft Learn doc patterns · copy/paste from `learn.microsoft.com` works directly · `ConvertFrom-Json` is genuinely nicer than `jq` chains | Drift is real — but solvable with shared parity tests + CI gate. Worth bake-off. |
+| B. Python SDK rewrite | Single source · type-checkable · faster runtime (no subprocess spawn) · aligns with `azure-ai-projects` we already require | SDK api-versions are hidden inside package versions (arguably worse drift than greppable bash). Preview APIs need `httpx` fallback (back to manual REST). Bigger migration. |
+| C. Status quo + WSL2 docs | Zero cost | Ships debt forward to every new Windows consumer. |
+
+**Bake-off plan (v0.24 candidate):**
+
+1. **Install pwsh on the dev's machine.** Linux/Mac: pwsh 7.4+ runs cross-platform.
+   ```bash
+   # WSL2 / Ubuntu 24.04
+   wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+   sudo dpkg -i packages-microsoft-prod.deb
+   sudo apt-get update && sudo apt-get install -y powershell
+   ```
+2. **Port `discover-target.sh` to `discover-target.ps1`** as the bake-off candidate. Touches most of our patterns: `az rest`, JSON parsing, per-account loops, stderr capture, parallelism opportunity.
+3. **Build `tests/parity/` harness** (the gate that prevents TD-24-style drift in a dual-script world):
+   - `tests/parity/mocks/az` — fake `az` binary returning canned JSON from `fixtures/`
+   - `tests/parity/run-parity.sh` — runs both implementations against mocked `az`, diffs `sort`ed output, exits non-zero on divergence
+   - `tests/parity/live/verify-against-agents-3iq.sh` — optional live run (slower; needs auth)
+   - `.github/workflows/script-parity.yml` — matrix `ubuntu-latest`, `macos-latest`, `windows-latest`
+4. **Measure:** LOC delta, runtime, drift surfaces during port, copy-paste-from-Learn fidelity, Windows smoke pass.
+5. **Decide based on data, not preference.** Possible outcomes:
+   - Dual bash+pwsh wins → port remaining hot-path scripts (8 scripts every prompt uses) in v0.25; long tail later.
+   - Bake-off reveals divergence is unmanageable → close TD-28 with the data, document why, stay with bash + WSL2 (Option C).
+   - Bake-off reveals Python (Option B) is materially better than either → reopen with Python framing as TD-29.
+
+**Decision criteria for "dual wins":**
+- pwsh port LOC within ~120% of bash baseline.
+- Parity tests catch 100% of seeded divergences (we'll deliberately introduce 3-5 drifts during the bake-off and confirm CI fails).
+- Windows smoke test on `windows-latest` runner passes.
+- No more than 2 places needed OS-specific code (e.g. path separator handling).
+
+**Decision criteria for "abandon dual":**
+- pwsh port LOC > 200% of bash baseline.
+- Windows surfaces non-trivial issues (e.g. `azd ai agent` CLI behaves differently, auth tokens scope differently).
+- Drift becomes obvious within first week of dual maintenance.
+
+**Cross-refs:**
+- TD-24 / TD-27 — drift management lesson informs the parity-test design.
+- TD-25 — multi-account loop pattern is one of the patterns the bake-off must validate translates cleanly.
+
+**Maintainer skill addendum (already shipped in v0.23.0):** `foundry-skillpack-builder` SKILL.md invariant #9 already requires verify-on-touch for api-versions; that discipline transfers directly to dual-script maintenance.
+
+**Out of scope until decision lands:**
+- Don't write `.ps1` siblings for scripts other than the bake-off candidate.
+- Don't update install-prereqs.sh to provision pwsh (gated on dual-script direction being approved).
+- Don't ship pwsh into `.agents/skills/` via `apm install` (no consumer impact until dual is decided).
+
+## TD-29 — AGT (Microsoft Agent Governance Toolkit) as a declarable runtime-governance layer (OPEN — v0.24 candidate)
+
+**What:** [Microsoft Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) (AGT) is the runtime governance layer for AI agents — official `microsoft/` org, v3.7.0, 2.3k stars, 102 contributors, multi-language SDK (Python full / TypeScript / .NET / Rust / Go), OpenSSF Scorecard, RFC 2119 specs with 992 conformance tests, OWASP Agentic Top 10 / NIST AI RMF / EU AI Act / SOC 2 mappings. AGT explicitly lists Azure AI Foundry as one of its supported deployment targets. **This skillpack does not currently integrate with AGT and does not reference it.**
+
+**Why this is debt:** A consumer who discovers AGT independently and then finds this skillpack will reasonably ask "are these competing?" without explicit positioning. They are not — AGT is runtime middleware (per-tool-call policy + identity + audit) and we are deploy + lifecycle orchestration (provision + RBAC + capability gates + Foundry-native evals + Teams publish). They sit on different layers of the same stack. But without explicit integration the consumer has to wire AGT into their Foundry agent manually, outside our orchestration, which fragments configuration and breaks the audit story (AGT's Merkle log lives separately from our `/audit-drift` reconciliation).
+
+**Strategic posture: adopt and integrate, not compete.** AGT is larger, well-funded, and structurally correct for its layer. Our value is everything outside the container that AGT cannot do.
+
+**Close-out (intended shape, v0.24+):**
+
+1. **`agent-capabilities.yaml` accepts a new top-level key:**
+
+   ```yaml
+   runtime_governance:
+     provider: agt                        # or 'none' (default)
+     policy_file: governance/policy.yaml  # AGT YAML / OPA / Cedar
+     fail_mode: deny                      # deny | allow | require_approval
+     audit_sink: merkle                   # merkle | otel | both
+   ```
+
+2. **`/prepare-deploy` gate**, when `runtime_governance.provider == agt`:
+   - Injects `agent-governance-toolkit[full]` into the agent's container `requirements.txt`.
+   - Validates the referenced policy file with `agt lint-policy`.
+   - Emits the AGT-required env vars (`AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_CLIENT_SECRET` for Azure-integrated AGT features) into the deployment manifest.
+
+3. **Skillpack agent templates** (`agent-framework` and `langgraph-byo` under `foundry-deploy/templates/`) include a commented-out `govern(...)` wrap example next to each declared tool function. Uncommented automatically when AGT is the declared provider.
+
+4. **Foundry-native eval rules cross-link AGT decisions** through OTel spans (AGT decision records become `evaluator.agt.*` span attributes), so App Insights includes per-tool-call policy outcomes alongside eval rule results in a single timeline.
+
+5. **`foundry-guardrails` skill** gains an "AGT integration" section under a new Layer 0 (deterministic runtime enforcement, ordered before middleware). Current four-layer model becomes a five-layer model with AGT optional but recommended.
+
+6. **`/audit-drift`** reconciles declared `runtime_governance.policy_file` against the policy file present in the deployed container image (catches the drift case where policy is edited locally but not redeployed).
+
+7. **OWASP Agentic Top 10 mapping table** in `docs/concepts/related-work.md` becomes the formal compliance bridge — each row maps the risk to AGT's mitigation (runtime) and our mitigation (provisioning). Promotes "we cover OWASP through both layers" to a defensible claim instead of marketing copy.
+
+**Why deferred from v0.23.0:**
+- The `agent-capabilities.yaml` schema bump is breaking-shaped for downstream consumers; needs design review against TD-19 alias-window discipline.
+- AGT itself is at v3.7.0 ("Public Preview") with breaking-change risk before GA — want to land integration against a stable AGT minor.
+- Template injection of `govern(...)` boilerplate needs a real bake-off (does it work cleanly with our existing agent-framework + langgraph-byo templates? what does the `tool_name` convention look like across both?).
+- Needs alignment with TD-30 (compliance mapping) since both touch the same OWASP table.
+
+**Decision criteria for "AGT integration ships in v0.24":**
+- AGT releases v4.0 / GA (or a sufficiently stable v3.x for our integration window).
+- We confirm AGT's `govern(...)` SDK works inside the Foundry hosted-agent container (no conflicts with the agent-framework or langgraph runtime).
+- Policy file format is validated against at least 3 real Foundry use-cases (knowledge-source-only agent, Fabric+Teams agent, multi-agent orchestration).
+
+**Cross-refs:**
+- TD-30 (compliance mapping) — will follow once AGT integration lands so the mapping is grounded in actual mechanisms, not theoretical coverage.
+- `foundry-guardrails` skill SKILL.md — will need Layer 0 section added.
+- `docs/concepts/related-work.md` — the consumer-facing version of this story; updated in v0.23.0 alongside this TD entry.
+
+**Out of scope:**
+- Replacing our `foundry-guardrails` Layer 1-4 with AGT. AGT does not cover Purview DLP (Layer 1.5 unique enforcement gap), Foundry-native Content Safety, or Foundry-native eval/red-team — these stay as ours and are complementary to AGT's runtime policy engine.
+- Adopting AGT's SPIFFE/DID identity primitive for Foundry agents. Foundry agents already have Entra Agent ID + project/agent/application identity flip — the Microsoft-native model. AGT's identity model is for cross-cloud / multi-runtime scenarios where Entra is not the issuer.
+
 

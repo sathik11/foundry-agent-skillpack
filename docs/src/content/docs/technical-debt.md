@@ -24,6 +24,10 @@ The on-disk source of truth is [`TECHNICAL_DEBT.md`](https://github.com/sathik11
 | TD-17 | **Phase 1 shipped (v0.18.0)** | Docs site drift from skillpack sources — set-difference drift check; full mirror in Phase 2 | (project / docs) |
 | TD-18 | **Open (mitigated, v0.19.0)** | Foundry MCP lacks native `model_deployment_list` — skillpack routes through Azure MCP `mcp_azure_mcp_foundry` for the enumeration call | foundry-deploy / model-selection |
 | TD-19 | **Open (alias active, v0.19.0)** | Package renamed `foundry-agent-harness` → `foundry-agent-skillpack` — `aliases:` keeps old name resolving for one release; consumers must update `apm.yml` before v0.20.0 | (project) |
+| TD-26 | **Open (preventive)** | Resource Graph hybrid for `discover-target.sh` — one ARG query for accounts + projects + ACRs (eliminates api-version drift class) + parallel `account deployment list` fan-out; verified PoC 4× faster than today | foundry-deploy / discover-target |
+| TD-27 | **Open (preventive)** | No central registry of api-versions — inline `api-version=` strings in `az rest` calls silently drift; proposes `.apm/scripts/_api-versions.sh` constants + shared error-surfacing helper | (project / scripts) |
+| TD-28 | **Open (bake-off, v0.24)** | Cross-OS script runtime — skillpack is bash-only; Windows needs WSL2 (Git Bash unsupported); dual bash + PowerShell-7 siblings under formal evaluation with parity-test harness in v0.24 | (project / scripts) |
+| TD-29 | **Open (adopt + integrate, v0.24 candidate)** | [Microsoft Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) (AGT) as a declarable runtime-governance layer — new `runtime_governance: agt` key in `agent-capabilities.yaml`, container `requirements.txt` injection, template `govern(...)` wraps, OTel cross-link to AGT decisions, `/audit-drift` reconciles policy file. AGT is the runtime layer; we are the deploy+lifecycle layer. See [Related work](/concepts/related-work/) | foundry-guardrails / foundry-deploy / agent-capabilities.yaml |
 
 ## Closed
 
@@ -34,6 +38,8 @@ The on-disk source of truth is [`TECHNICAL_DEBT.md`](https://github.com/sathik11
 | TD-11 | v0.11.0 | `agent-status.json` durable state |
 | TD-12 | v0.17.0 | `/audit-drift` prompt |
 | TD-23 | v0.22.0 | Inbound firewall coverage for Teams / M365 Copilot → private Foundry agent — `foundry-teams-workiq/inbound-firewall.md` + APIM v2 Bicep + render-apim-policy.sh + probe-inbound-chain.sh + additive `publish.inbound_chain` schema block |
+| TD-24 | v0.23.0 | api-version drift in `az rest` calls — 4 versions bumped to current GA (discover-target / check-identities / check-service-endpoint-policy / deep-walk-firewall / two-identities.md); explicit stderr capture replaces silent `\|\| echo '[]'` swallow in discover-target |
+| TD-25 | v0.23.0 | `discover-target.sh` enumerated sub-resources only for account [0] — multi-account RGs silently lost projects + deployments; per-account loop emits `ACCOUNT_<n>_PROJECT_NAMES=` / `ACCOUNT_<n>_DEPLOYMENT_NAMES=` aggregate keys |
 
 ## Pattern
 
