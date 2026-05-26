@@ -83,7 +83,7 @@ Both layers cover most risks — **neither alone is sufficient for high-stakes d
 
 ## Adopt-and-integrate plan — TD-29
 
-Tracked under [TD-29 in TECHNICAL_DEBT.md](/technical-debt/). The intended shape (v0.24+ candidate):
+Tracked under [TD-29 in TECHNICAL_DEBT.md](/technical-debt/). The intended shape (v0.24 firm; TD-28 cross-OS bake-off runs in parallel as research with its ship decision in v0.25):
 
 1. **`agent-capabilities.yaml` accepts a new top-level key:**
 

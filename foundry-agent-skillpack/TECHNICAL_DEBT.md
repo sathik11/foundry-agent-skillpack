@@ -423,7 +423,7 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 
 **Out of scope:** Foundry data-plane and Search data-plane versions live in a different versioning track (service endpoints, not ARM RPs). They need their own verification — `microsoft_docs_search` queries against MS Learn, or a known-good probe call.
 
-## TD-28 — Cross-OS script runtime — bash + pwsh dual-script bake-off (OPEN)
+## TD-28 — Cross-OS script runtime — bash + pwsh dual-script bake-off (OPEN — v0.24 bake-off, v0.25 ship decision)
 
 **What:** Every `.apm/skills/*/scripts/*.sh` in the skillpack is bash-only (28+ scripts, ~79 `az` invocations, ~104 `jq` invocations). Native Windows (PowerShell / cmd) cannot run them. Today's only Windows path is WSL2; Git Bash partially works but bites on path mangling, `python3` aliasing, and process substitution in multi-line `jq` pipelines.
 
@@ -439,7 +439,7 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 | B. Python SDK rewrite | Single source · type-checkable · faster runtime (no subprocess spawn) · aligns with `azure-ai-projects` we already require | SDK api-versions are hidden inside package versions (arguably worse drift than greppable bash). Preview APIs need `httpx` fallback (back to manual REST). Bigger migration. |
 | C. Status quo + WSL2 docs | Zero cost | Ships debt forward to every new Windows consumer. |
 
-**Bake-off plan (v0.24 candidate):**
+**Bake-off plan (v0.24 — research only, no consumer-visible scripts shipped):**
 
 1. **Install pwsh on the dev's machine.** Linux/Mac: pwsh 7.4+ runs cross-platform.
    ```bash
@@ -456,9 +456,11 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
    - `.github/workflows/script-parity.yml` — matrix `ubuntu-latest`, `macos-latest`, `windows-latest`
 4. **Measure:** LOC delta, runtime, drift surfaces during port, copy-paste-from-Learn fidelity, Windows smoke pass.
 5. **Decide based on data, not preference.** Possible outcomes:
-   - Dual bash+pwsh wins → port remaining hot-path scripts (8 scripts every prompt uses) in v0.25; long tail later.
-   - Bake-off reveals divergence is unmanageable → close TD-28 with the data, document why, stay with bash + WSL2 (Option C).
-   - Bake-off reveals Python (Option B) is materially better than either → reopen with Python framing as TD-29.
+   - Dual bash+pwsh wins → ship migrated hot-path scripts (8 scripts every prompt uses) in **v0.25**; long tail later.
+   - Bake-off reveals divergence is unmanageable → close TD-28 in **v0.25** with the data, document why, stay with bash + WSL2 (Option C).
+   - Bake-off reveals Python (Option B) is materially better than either → reopen with Python framing as TD-30 (note: shifted from previously planned TD-30 for compliance mapping; renumber if needed).
+
+**Sequencing rationale:** TD-28 and TD-29 were both originally labeled "v0.24 candidate". They are independent work streams (different code paths, different reviewer brains) and bundling risks delivering neither well. **TD-29 (AGT integration) is firmed to v0.24** as the strategic-credibility release; **TD-28 bake-off runs as research during v0.24** and ships its decision in v0.25. No consumer-visible pwsh scripts ship until v0.25.
 
 **Decision criteria for "dual wins":**
 - pwsh port LOC within ~120% of bash baseline.
@@ -482,7 +484,7 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 - Don't update install-prereqs.sh to provision pwsh (gated on dual-script direction being approved).
 - Don't ship pwsh into `.agents/skills/` via `apm install` (no consumer impact until dual is decided).
 
-## TD-29 — AGT (Microsoft Agent Governance Toolkit) as a declarable runtime-governance layer (OPEN — v0.24 candidate)
+## TD-29 — AGT (Microsoft Agent Governance Toolkit) as a declarable runtime-governance layer (OPEN — v0.24 firm)
 
 **What:** [Microsoft Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) (AGT) is the runtime governance layer for AI agents — official `microsoft/` org, v3.7.0, 2.3k stars, 102 contributors, multi-language SDK (Python full / TypeScript / .NET / Rust / Go), OpenSSF Scorecard, RFC 2119 specs with 992 conformance tests, OWASP Agentic Top 10 / NIST AI RMF / EU AI Act / SOC 2 mappings. AGT explicitly lists Azure AI Foundry as one of its supported deployment targets. **This skillpack does not currently integrate with AGT and does not reference it.**
 
@@ -490,7 +492,7 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 
 **Strategic posture: adopt and integrate, not compete.** AGT is larger, well-funded, and structurally correct for its layer. Our value is everything outside the container that AGT cannot do.
 
-**Close-out (intended shape, v0.24+):**
+**Close-out (intended shape, v0.24 firm):**
 
 1. **`agent-capabilities.yaml` accepts a new top-level key:**
 
@@ -527,6 +529,8 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 - AGT releases v4.0 / GA (or a sufficiently stable v3.x for our integration window).
 - We confirm AGT's `govern(...)` SDK works inside the Foundry hosted-agent container (no conflicts with the agent-framework or langgraph runtime).
 - Policy file format is validated against at least 3 real Foundry use-cases (knowledge-source-only agent, Fabric+Teams agent, multi-agent orchestration).
+
+**Sequencing:** TD-29 is firmed to v0.24 as the headline. TD-28 (cross-OS bake-off) runs as research in parallel during v0.24 but does not ship consumer-visible pwsh scripts until v0.25. Different code paths, different reviewer brains; bundling risks delivering neither well.
 
 **Cross-refs:**
 - TD-30 (compliance mapping) — will follow once AGT integration lands so the mapping is grounded in actual mechanisms, not theoretical coverage.

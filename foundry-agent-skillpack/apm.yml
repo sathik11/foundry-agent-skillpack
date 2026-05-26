@@ -23,20 +23,29 @@ version: 0.23.0
 #     subscription pick, RBAC role check). README + docs/install.md +
 #     skillpack README now cover prereqs, Windows guidance (WSL2 supported,
 #     Git Bash unsupported), and the one-liner curl install.
-#   - Opens TD-28 (cross-OS script runtime — bash + pwsh dual-script bake-off,
-#     v0.24 candidate). Includes parity-test harness design (mocked `az` +
-#     golden fixtures + CI gate on ubuntu/macos/windows) so drift surfaces at
-#     PR time, not production-failure time.
+#   - Opens TD-28 (cross-OS script runtime — bash + pwsh dual-script bake-off).
+#     v0.24 bake-off (research only, no consumer-visible pwsh scripts);
+#     v0.25 ship decision (migrate hot-path scripts OR close with data and
+#     stay bash + WSL2). Includes parity-test harness design (mocked `az` +
+#     golden fixtures + CI gate on ubuntu/macos/windows).
 #   - Positioning: new "How we fit alongside Microsoft Agent Governance
 #     Toolkit (AGT)" section in root README + dedicated docs page
 #     `concepts/related-work.md` with the two-layer model, dimension-by-
 #     dimension comparison, vocabulary-overlap map, OWASP Agentic Top 10
 #     split across both layers, and the adopt-and-integrate stance.
 #   - Opens TD-29 (AGT as declarable `runtime_governance: agt` layer in
-#     agent-capabilities.yaml — v0.24 candidate). Stated posture: adopt and
+#     agent-capabilities.yaml — v0.24 firm). Stated posture: adopt and
 #     integrate, not compete. AGT is runtime middleware; we are deploy+
 #     lifecycle orchestration. They are complementary layers of the same
 #     stack and intended to be used together for production Foundry agents.
+#   - Option A skill alignment (in-skill, this release): foundry-guardrails
+#     SKILL.md gains a "Related runtime layer — AGT" callout describing the
+#     five-layer model with AGT as Layer 0. four-layer-guardrails.md mirrors.
+#     foundry-conventions.md adds explicit scope boundary line. Full Option B
+#     declarative integration lands in v0.24 via TD-29.
+#   - Sequencing: TD-29 firm for v0.24 (headline). TD-28 runs as research
+#     during v0.24, ships decision in v0.25. Independent code paths,
+#     bundling risks delivering neither well.
 # v0.22.0:
 #   - Closes TD-23: inbound firewall coverage for Teams / M365 Copilot → private
 #     Foundry agent. Ships foundry-teams-workiq/inbound-firewall.md +
