@@ -183,3 +183,94 @@ Before Phase 3 implementation starts, the reviewer should explicitly answer:
 6. Should `langgraph-byo` template integration block v0.24, or is `agent-framework`-only acceptable for the v0.24 cut?
 
 Answers go in §5 as "DECIDED:" annotations; default recommendations stand if not answered.
+
+---
+
+## 11. Phase 2 sub-spike addendum (2026-05-26)
+
+Three follow-up sub-spikes ran against the same `/tmp/agt-spike` venv after the original spike. **Four substantive findings**, including one that simplifies the design materially.
+
+### Finding 1 — AGT emits OTel spans natively (simplifies the design)
+
+`grep -r "set_attribute" .venv/.../agentmesh/` reveals **6 agentmesh modules instrument with OpenTelemetry**, including a dedicated `agentmesh.governance.otel_observability` module. The real span-attribute namespace is **`agt.*`**, not the `evaluator.agt.*` shape I invented in §3.
+
+Confirmed real attribute names AGT emits (partial list):
+- `agt.action`, `agt.agent.id`, `agt.agent_id`, `agt.did`
+- `agt.policy.action`, `agt.policy.denials`, `agt.policy.evaluate`, `agt.policy.evaluations`, `agt.policy.latency_ms`
+- `agt.approval.approver`, `agt.approval.outcome`, `agt.approval.request`, `agt.approval.requests`
+- `agt.audit.append`, `agt.audit_entries`
+
+Tracer names (for OTel SDK setup):
+- `agentmesh.governance` (primary)
+- `agentmesh.providers.audit`, `agentmesh.providers.capability`, `agentmesh.providers.delegation`
+- `agentmesh.server.api_gateway`, `agentmesh.server.policy_server`, `agentmesh.server.trust_engine`
+
+**Design impact (this rewrites part of §3 and §4):**
+- ❌ DROP the `on_deny` callback approach for OTel cross-link. We don't need it.
+- ✅ ADD: ensure the agent container's OTel SDK collects from the `agentmesh.governance` tracer (default config does this if `azure-monitor-opentelemetry` is set up — already the case in our templates as of v0.18).
+- ✅ ADD: document the `agt.*` attribute namespace in our KQL cookbook so operators can query AGT decisions in App Insights.
+- ✅ KEEP: `audit_sink: otel` in the schema, but it now means "use AGT's native OTel emission" rather than "we wire a callback."
+
+### Finding 2 — `@tool(approval_mode=...)` + `govern()` ordering — no conflict
+
+`agent_framework.tool` is a decorator factory. `@tool(approval_mode="never_require")(echo)` returns a **`FunctionTool` class instance** (no `__wrapped__` attribute; `__name__` not set). `govern()` accepts the `FunctionTool` as its `fn` parameter and returns a `GovernedCallable` cleanly.
+
+**Design impact:** Templates can write `safe_x = govern(x, policy=...)` directly after `@tool` decoration. No special unwrapping or re-ordering needed.
+
+### Finding 3 — `langgraph-byo` template integration is unblocked
+
+`langgraph` + `langchain_core.tools.tool` install cleanly alongside `agentmesh` (no version conflicts on `pydantic` / `click` / `pyyaml`). Plain Python tool functions (the BYO pattern in our `langgraph-byo` template) wrap with `govern()` with the same API surface as `agent_framework` tools.
+
+**Design impact:** `langgraph-byo` template integration is in scope for v0.24 (answer to reviewer question 6 above). Do NOT defer to v0.25.
+
+### Finding 4 — Policy condition DSL is not what the docs imply (Phase 3 prerequisite)
+
+When the spike called `safe_db('SELECT 1')` against a policy with `condition: "input contains 'DROP TABLE'"` and `defaults: { action: allow }`, AGT raised:
+
+```
+GovernanceDenied: Action denied by policy rule 'None': No matching rules, using default
+```
+
+This is a **deny on a call we expected to allow**. Same behavior on both `agent_framework`-decorated functions and plain Python functions. Most likely cause: the condition string `"input contains 'DROP TABLE'"` does not resolve against positional call arguments — AGT's evaluator probably requires either:
+
+- An explicit `input=` keyword argument: `safe_db(input='SELECT 1')`, OR
+- A different field-reference syntax that maps to call-context fields, OR
+- A different default-action interpretation than `defaults: { action: allow }` documents
+
+**This is a policy-authoring gotcha, not an integration blocker** — the integration code path works; the policy DSL needs a focused mini-spike before we ship any `policy.yaml` template.
+
+**Design impact (Phase 3 prerequisite):**
+1. Phase 3 starts with a 30-min focused sub-spike on AGT's condition evaluation rules: read `agentmesh.governance.policy` source for the field-resolution logic; document what `condition:` strings actually evaluate against; capture rules for the policy.yaml template we ship.
+2. Until that's resolved, our `governance/policy.yaml` starter template must explicitly say "examples are illustrative; run `agt lint-policy` *and* a deny-path test before deploy."
+3. The `/prepare-deploy` AGT gate should run a smoke test: call the deployed governed function with a known-deny input AND a known-allow input, fail if either behaves unexpectedly. This catches the docs-vs-reality gap before production.
+
+### Finding 5 — `AGENTMESH_RELAY_TOKEN` env var (Tier 3 add-on territory)
+
+On `import agentmesh.governance`, AGT prints:
+```
+AGENTMESH_RELAY_TOKEN is not set — the relay will accept unauthenticated connections.
+Set this env var in production.
+```
+
+This suggests AGT has a remote **trust-mesh relay** component that listens for unauthenticated connections by default. For our in-process `govern()` Tier 1 path, the relay is not used — but the warning will appear in Foundry container logs and may worry operators.
+
+**Design impact:**
+- Phase 3 adds an env var `AGENTMESH_RELAY_DISABLED=1` (or equivalent — check AGT docs) to the template's deployment manifest to silence the warning when the relay isn't used.
+- The relay itself maps to AGT's `agentmesh_platform` SPIFFE/DID layer — which is already on the Tier 3 NOT-integrated list. Add a callout to §2 confirming this is intentional.
+
+### What sub-spikes did NOT confirm (still open for Phase 3)
+
+- `agt lint-policy` CLI exact arguments and exit codes (need to run it against the corrected-syntax policy).
+- Whether `mcp_security_gateway` is in-process (importable as a module) or requires a separate sidecar.
+- AGT performance overhead per `govern()` call (the sub-ms claim from README; affects latency budgets in `foundry-prod-readiness`).
+
+These are Phase 3 measurements, not blockers for the design lock.
+
+---
+
+## 12. Updated reviewer asks (after Phase 2)
+
+Reviewer questions 1-6 from §10 still apply. Two **additional** questions from the sub-spike findings:
+
+7. Is the corrected OTel architecture (rely on AGT's native `agt.*` span emission, no `on_deny` cross-link callback) acceptable? It's strictly simpler than the original §3 design.
+8. Acceptable to spend the first 30 min of Phase 3 on a policy-DSL mini-spike (Finding 4) before any other code lands? Without it, the `policy.yaml` template we ship would likely be broken.
