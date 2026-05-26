@@ -83,7 +83,7 @@ Both layers cover most risks — **neither alone is sufficient for high-stakes d
 
 ## Adopt-and-integrate plan — TD-29
 
-Tracked under [TD-29 in TECHNICAL_DEBT.md](/technical-debt/). The intended shape (v0.24 firm; TD-28 cross-OS bake-off runs in parallel as research with its ship decision in v0.25):
+Tracked under [TD-29 in TECHNICAL_DEBT.md](/technical-debt/). Full design proposal under review: [`design/td-29-agt-integration.md`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/design/td-29-agt-integration.md) (3-tier model, Phase 1 spike findings, schema lock proposal, 6 reviewer questions). The intended shape (v0.24 firm; TD-28 cross-OS bake-off runs in parallel as research with its ship decision in v0.25):
 
 1. **`agent-capabilities.yaml` accepts a new top-level key:**
 
