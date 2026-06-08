@@ -1,5 +1,5 @@
 ---
-validity_date: 2026-05-15
+validity_date: 2026-06-08
 audience: Greenfield (no existing agent code)
 duration: ~30 minutes
 surfaces: [agent_framework_runtime, public_mcp, middleware_guardrails, continuous_eval]
@@ -101,7 +101,7 @@ capabilities:
 
 What happens:
 
-  - **Step 0 — Caller-role + target preflight (NEW v0.19).** Reads `target:` from the manifest (no re-prompt) and runs `preflight-role.sh prepare-deploy ...` to confirm `Contributor` + `Azure AI Developer`. Fails fast if missing.
+  - **Step 0 — Caller-role + target preflight (NEW v0.19).** Reads `target:` from the manifest (no re-prompt) and runs `preflight-role.sh prepare-deploy ...` to confirm `Contributor` + `Foundry Project Manager`. Fails fast if missing.
   - **Track H gates** (H1–H5) inspect `agent.yaml`, `Dockerfile`, `requirements.txt`, `main.py` — all should ✅.
   - **Step 2 — Resource validation.** Re-uses `target:` from Step 0; only re-prompts for ACR (Track H).
   - **Step 2.4 — Model deployment validation.** Calls `mcp_foundry_mcp_model_deployment_get` for `model.deployment_name`. 200 ✅. (If 404, you get the same 3-way fork from `/plan-agent` Step 0b: pick / deploy-with-consent / runbook.)
@@ -183,7 +183,7 @@ If `Tools: ❌` (no spans) — confirm `ENABLE_INSTRUMENTATION=true` is on the a
 
 What happens:
 
-  - **Step 0** preflights `Azure AI User` on the project.
+  - **Step 0** preflights `Foundry User` on the project.
   - **Step 2** runs `ensure_continuous_eval.py --dry-run` first — review the plan:
   ```
   rule_name:       continuous-eval-hello-foundry

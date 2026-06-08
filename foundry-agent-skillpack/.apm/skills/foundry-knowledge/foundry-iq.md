@@ -42,8 +42,8 @@ A single MCP tool: `knowledge_base_retrieve`. The platform handles query plannin
 
 | Identity | Role | Scope |
 |---|---|---|
-| **Caller** (one-time setup) | `Azure AI User` | Foundry account |
-| **Caller** (one-time setup) | `Azure AI Project Manager` | Foundry account (to create the connection) |
+| **Caller** (one-time setup) | `Foundry User` | Foundry account |
+| **Caller** (one-time setup) | `Foundry Project Manager` | Foundry account (to create the connection) |
 | **Project MI** (runtime) | `Search Index Data Reader` | AI Search service |
 | **Project MI** (runtime, write) | `Search Index Data Contributor` | AI Search service (only if agent writes back) |
 | **End user** (per-request, ACL'd sources) | `x-ms-query-source-authorization` token | passed at query time |
@@ -90,7 +90,7 @@ Run when `knowledge.sources[].kind == foundry_iq`:
 1. **AI Search service exists** + supports agentic retrieval (S1 SKU or higher; verify `properties.semanticSearch != "disabled"`).
 2. **Knowledge base exists** in the search service (REST: `GET {search}/knowledgebases/{name}?api-version=2025-11-01-preview`).
 3. **Project connection exists** (or — with user confirmation — create it via `RemoteTool` + `ProjectManagedIdentity`).
-4. **Caller RBAC** (`Azure AI User` + `Azure AI Project Manager` on the Foundry account; `Search Service Contributor` on the search service to create KBs/sources).
+4. **Caller RBAC** (`Foundry User` + `Foundry Project Manager` on the Foundry account; `Search Service Contributor` on the search service to create KBs/sources).
 5. **Network class compatibility** (always ✅ for `foundry_iq`).
 
 If any ❌, STOP and emit runbook via [foundry-roles](../foundry-roles/scripts/runbook-emit.sh).

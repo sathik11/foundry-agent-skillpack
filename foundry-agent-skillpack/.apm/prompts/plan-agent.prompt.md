@@ -16,6 +16,12 @@ You are a Foundry Agent Engineer. Use the **foundry-patterns** skill.
 
 Before touching any files, discover the deployment target and confirm the caller has the rights to plan.
 
+0. **Check for cached project topology (opt-in fast path).** If `./assessment/project-topology.md` and `./assessment/agent-capabilities.draft.yaml` both exist in the current working directory (typically because the user ran `/assess-project` first), parse them:
+   - Read `target:` (subscription / resource group / foundry account / project / location) from `agent-capabilities.draft.yaml`.
+   - Read the verdict table from `project-topology.md` and show the ✅/⚠/❌ summary inline.
+   - Skip Steps 1–3 below and ask the user once: "I found a project assessment in `./assessment/`. Use these values as the target, or run discovery again?" Default to the cached values. Re-prompt only for fields the stub left as `TODO`.
+   - When cached values are used, jump to Step 4 (Batch role check) with the loaded target.
+
 1. **Subscription.** If the user did not pass `subscription=`, list subscriptions with `mcp_azure_mcp_subscription_list` and show a numbered picklist. **Wait for the user's selection.** Never auto-pick.
 2. **Resource group.** Run `mcp_azure_mcp_group_list subscription=<sub>` and show a numbered picklist scoped to the chosen subscription. **Wait for selection.** If the user types a name that is not in the list, do NOT silently create it — ask for confirmation.
 3. **Discover all target resources in one call.** Run:
@@ -83,7 +89,11 @@ Ask the user **once**:
    - External MCP server (Microsoft Learn, GitHub, custom) → Pattern 1a + `client.get_mcp_tool(...)` (see **foundry-deploy** [external-mcp.md](../skills/foundry-deploy/external-mcp.md))
    - Multiple agents needed (orchestrator + siblings, sequential or parallel) → Pattern 2a/2b/2c. Switch to the **foundry-multi-agent** skill for sub-agent invocation, the inter-tool data buffer (>25 records / >20KB), and SSE streaming (>120s pipelines). For an end-to-end walkthrough see [Recipe 06](../../../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/06-multi-agent-orchestration.md).
    Confirm with the user before generating files.
-2. **Copy templates** from `foundry-deploy/templates/` and substitute placeholders:
+2. **Pick the deploy mode.** Ask the user **once**:
+   > Container image (Docker + ACR — default) or source-code zip (preview, Foundry builds the image from a `main.py` + `requirements.txt`)?
+   - **Container** (default; back-compat) → continue with Step 3 below.
+   - **Source-code zip** (preview) → skip Step 3, jump to **Step 3-Code** below. Confirm with the user that they understand it's a preview surface (`api-version=2025-11-15-preview`, requires `Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview` on every mutating call, content-addressable versioning).
+3. **Copy container templates** from `foundry-deploy/templates/` and substitute placeholders:
    ```bash
    AGENT=agents/${input:agent_name}
    mkdir -p "$AGENT"
@@ -93,9 +103,32 @@ Ask the user **once**:
    cp .agents/skills/foundry-deploy/templates/requirements.txt.template "$AGENT/requirements.txt"
    ```
    Then substitute `${AGENT_NAME}`, `${MODEL_DEPLOYMENT_NAME}`, `${INSTRUCTIONS}`, `${AGENT_DESCRIPTION}`, `${ACR_NAME}` in each file.
-3. **Add `tools.py`** — one `@tool` stub per capability identified in the description.
-4. **Write INSTRUCTIONS** based on "${input:description}": role, tool-use rules, output format.
-5. If guardrails declared (Step 4): also `cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"` and uncomment the middleware lines in `main.py`.
+
+3-Code. **Copy source-code (zip) templates** — no Dockerfile, no ACR. Read [foundry-deploy/code-deploy.md](../skills/foundry-deploy/code-deploy.md) first.
+   ```bash
+   AGENT=agents/${input:agent_name}
+   mkdir -p "$AGENT"
+   cp .agents/skills/foundry-deploy/templates/agent.yaml.template       "$AGENT/agent.yaml"
+   cp .agents/skills/foundry-deploy/templates/main.py.template          "$AGENT/main.py"
+   cp .agents/skills/foundry-deploy/templates/requirements.txt.template "$AGENT/requirements.txt"
+   # Do NOT copy Dockerfile.template. Track H-Code of /prepare-deploy will STOP if it sees one.
+   ```
+   Then write `agent-capabilities.yaml` with the `deploy_mode` block (defaults for Track B-Code):
+   ```yaml
+   deploy_mode: code
+   code:
+     runtime: python_3_13          # ask user: python_3_13 | python_3_14 | dotnet_10
+     entry_point: main.py
+     dependency_resolution: remote_build   # default; switch to 'bundled' only if air-gapped or specific pin needs
+     protocol: responses
+   ```
+   Optionally scaffold with the azd CLI instead:
+   ```bash
+   azd ai agent init --deploy-mode code --runtime python_3_13 --entry-point main.py --dep-resolution remote_build
+   ```
+4. **Add `tools.py`** — one `@tool` stub per capability identified in the description.
+5. **Write INSTRUCTIONS** based on "${input:description}": role, tool-use rules, output format.
+6. If guardrails declared (Step 4): also `cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"` and uncomment the middleware lines in `main.py`.
 
 ## Track C — Prompt agent (no container)
 

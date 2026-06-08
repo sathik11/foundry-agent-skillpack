@@ -67,7 +67,7 @@ def main() -> int:
     args = parse_args()
 
     preflight_role(
-        scope=args.project_scope, role="Azure AI User",
+        scope=args.project_scope, role="Foundry User",
         action="setup-evals", why=f"Create scheduled-eval for {args.agent_name}",
     )
 

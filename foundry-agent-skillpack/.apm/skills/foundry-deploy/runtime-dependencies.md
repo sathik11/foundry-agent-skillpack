@@ -12,6 +12,11 @@ What runs on **your laptop** (or in CI) when the skillpack invokes convergent li
 # Foundry control-plane SDK — used by /setup-evals wrappers and /audit-drift
 pip install "azure-ai-projects>=2.0.0,<3"
 
+# IF you use the source-code (zip) deploy path (preview), bump the floor:
+# project.beta.agents.create_version_from_code / download_code require >=2.2.0
+# and a client built with allow_preview=True. See foundry-deploy/code-deploy.md.
+# pip install "azure-ai-projects>=2.2.0,<3"
+
 # Identity (avoid 1.26.0bX betas)
 pip install "azure-identity>=1.19.0,<1.26.0a0"
 

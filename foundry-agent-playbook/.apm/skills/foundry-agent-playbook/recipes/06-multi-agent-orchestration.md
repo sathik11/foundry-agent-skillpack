@@ -1,5 +1,5 @@
 ---
-validity_date: 2026-05-15
+validity_date: 2026-06-08
 audience: You have a working single agent (recipe 01 or 02 done) and need to decompose into a sibling pipeline because latency, scope, or right-sizing forces it
 duration: ~90 minutes
 surfaces: [agent_framework_runtime, sibling_orchestration, inter_tool_data_buffer, sse_streaming, per_agent_otel, per_agent_continuous_eval]
@@ -466,7 +466,7 @@ For each `/prepare-deploy` you'll see the same Track H gates as recipe 01. The o
 
 ## Step 5 — RBAC and identity per sibling (`/configure-rbac` × 4)
 
-Every agent gets its own Entra Agent ID and its own per-agent SP. **The orchestrator does NOT inherit sub-agent grants.** What the orchestrator's SP needs is the right to invoke other agents in the same project, which is conferred by the project's runtime roles (already granted by `/configure-rbac` Phase 2 — `Azure AI User` on the project).
+Every agent gets its own Entra Agent ID and its own per-agent SP. **The orchestrator does NOT inherit sub-agent grants.** What the orchestrator's SP needs is the right to invoke other agents in the same project, which is conferred by the project's runtime roles (already granted by `/configure-rbac` Phase 2 — `Foundry User` on the project).
 
 Run `/configure-rbac` for each:
 

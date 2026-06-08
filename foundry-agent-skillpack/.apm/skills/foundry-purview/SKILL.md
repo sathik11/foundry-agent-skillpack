@@ -27,7 +27,7 @@ With it: audit trail + inventory. NOT sufficient for full DLP.
 ## Prerequisites
 
 - License: M365 E7 OR Microsoft Agent 365
-- Role to flip toggle: `Cognitive Services Security Integration Administrator` or `Azure AI Account Owner`
+- Role to flip toggle: `Cognitive Services Security Integration Administrator` or `Foundry Account Owner`
 - Role for DSPM policies: `Purview Data Security AI Admin`
 
 ## Minimum Setup

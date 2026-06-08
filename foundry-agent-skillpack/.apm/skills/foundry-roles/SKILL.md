@@ -30,5 +30,5 @@ Every executable step in this package declares the role + scope it needs. This s
 
 - Per-agent identity discovery → [foundry-identity](../foundry-identity/SKILL.md)
 - Network preflight Reader requirement → [foundry-prod-readiness/networking.md](../foundry-prod-readiness/networking.md)
-- Eval rule role (`Azure AI User`) → [foundry-evals](../foundry-evals/SKILL.md)
+- Eval rule role (`Foundry User`) → [foundry-evals](../foundry-evals/SKILL.md)
 - Capability-driven Phase B grants → [capability-gates.md](../foundry-guardrails/capability-gates.md)

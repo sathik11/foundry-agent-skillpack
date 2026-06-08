@@ -44,3 +44,7 @@ Reserved prefixes — do NOT set in `agent.yaml`:
 ## Anti-pattern: `FoundryAgent` class
 
 `FoundryAgent` (agent-framework v1.1.1) silently no-ops in the refreshed preview because it injects `extra_body={"agent_reference": ...}` — the deprecated initial-preview pattern. Use the client-swap pattern above instead.
+
+## Code-deploy SDK surface (preview)
+
+The code-deploy (zip) path uses a **different** client surface — `project.beta.agents.create_version_from_code` / `download_code` on `AIProjectClient`. Requires `azure-ai-projects>=2.2.0` and `allow_preview=True` on the client. Read [code-deploy.md § SDK surface](code-deploy.md#sdk-surface--python-azure-ai-projects--220) for the full pattern. `project.agents.*` (no `beta`) remains the correct surface for reads (`get_version`, `list_versions`, `delete`).

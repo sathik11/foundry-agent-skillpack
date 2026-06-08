@@ -31,6 +31,10 @@ ACR_ID=$(az acr show -n "$ACR" -g "$RG" --query id -o tsv)
 
 grant() {
   local principal="$1" role="$2" scope="$3"
+  # `role` may be a role name OR a role-definition GUID. We prefer GUIDs for the
+  # four Foundry data-plane roles during the rename rollout (TD-30) — Microsoft
+  # Learn explicitly recommends "use the role definition ID (GUID) instead of
+  # the role name in your code to avoid issues during the rename rollout".
   echo "  - $role @ $(basename "$scope")"
   az role assignment create \
     --assignee-object-id "$principal" \
@@ -40,13 +44,20 @@ grant() {
     --only-show-errors >/dev/null || echo "    (may already exist — continuing)"
 }
 
+# Foundry data-plane role definition IDs (TD-30). Stable across the rename.
+ROLE_FOUNDRY_USER="53ca6127-db72-4b80-b1b0-d745d6d5456d"  # was: Azure AI User
+
 echo "[+] Phase 1 — Image pull (Project MI)"
 grant "$PROJECT_MI" "AcrPull" "$ACR_ID"
 
 echo "[+] Phase 2 — Runtime (per-agent identity)"
-grant "$AGENT_PRINCIPAL" "Azure AI User"                   "$ACCOUNT_ID"
-grant "$AGENT_PRINCIPAL" "Azure AI User"                   "$PROJECT_ID"
-grant "$AGENT_PRINCIPAL" "Azure AI Developer"              "$PROJECT_ID"
+# Foundry User at BOTH account and project — required for hosted-agent runtime.
+# The previous-version `Azure AI Developer` grant was removed: per the Microsoft
+# Learn hosted-agent permissions reference it is "insufficient for Hosted agent
+# scenarios" because it's scoped to Azure ML / Foundry hubs, not Foundry
+# projects. Foundry User is the documented per-agent runtime role. (TD-30)
+grant "$AGENT_PRINCIPAL" "$ROLE_FOUNDRY_USER"              "$ACCOUNT_ID"
+grant "$AGENT_PRINCIPAL" "$ROLE_FOUNDRY_USER"              "$PROJECT_ID"
 grant "$AGENT_PRINCIPAL" "Cognitive Services OpenAI User"  "$ACCOUNT_ID"
 grant "$AGENT_PRINCIPAL" "Cognitive Services User"         "$ACCOUNT_ID"
 

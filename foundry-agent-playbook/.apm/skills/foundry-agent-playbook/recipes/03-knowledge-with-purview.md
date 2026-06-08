@@ -1,5 +1,5 @@
 ---
-validity_date: 2026-05-14
+validity_date: 2026-06-08
 audience: You have (or can create) a Foundry IQ knowledge base; tenant has Purview audit available
 duration: ~60 minutes (mostly waiting for Purview audit population)
 surfaces: [agent_framework_runtime, foundry_iq_knowledge, content_safety, purview_audit]
@@ -7,7 +7,7 @@ prerequisites:
   - Recipe 01 or 02 completed (you have a working agent)
   - Foundry IQ knowledge base in your AI Search service (or follow https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq to create one)
   - Tenant licensed for M365 E5 OR Microsoft Agent 365 (Purview AI audit requirement)
-  - Caller has `Cognitive Services Security Integration Administrator` OR `Azure AI Account Owner` on the Foundry account (to flip the Purview toggle)
+  - Caller has `Cognitive Services Security Integration Administrator` OR `Foundry Account Owner` on the Foundry account (to flip the Purview toggle)
   - Content Safety resource + connection in the Foundry project
 ---
 
@@ -77,7 +77,7 @@ What you're looking for:
 - **`knowledge.foundry_iq` gate:**
   - AI Search service exists + supports agentic retrieval (`semanticSearch != "disabled"`).
   - Knowledge base `hr-policy-kb` exists in the search service.
-  - Caller has `Search Service Contributor` on the search service AND `Azure AI Project Manager` on the Foundry project.
+  - Caller has `Search Service Contributor` on the search service AND `Foundry Project Manager` on the Foundry project.
   - Project connection `kb-mcp-prod` exists OR can be created.
 - **`guardrails.content_safety` gate:**
   - CS connection `cs-prod` exists in the project.
@@ -130,7 +130,7 @@ This is the step that often blocks dev-only callers. The toggle lives at:
 
 > Azure Portal → Foundry account → **Operate → Compliance → Security → Microsoft Purview** → Enabled
 
-Required role: `Cognitive Services Security Integration Administrator` OR `Azure AI Account Owner`.
+Required role: `Cognitive Services Security Integration Administrator` OR `Foundry Account Owner`.
 
 If you don't have the role, the skillpack emits a runbook for the assignee. Don't block the rest of the deploy — Phase B grants don't depend on this toggle.
 

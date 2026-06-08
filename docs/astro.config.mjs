@@ -49,6 +49,7 @@ export default defineConfig({
             { slug: 'concepts/capability-manifest' },
             { slug: 'concepts/agent-status' },
             { slug: 'concepts/lifecycle' },
+            { slug: 'concepts/project-assessment' },
             { slug: 'concepts/convergent-scripts' },
             { slug: 'concepts/four-layer-guardrails' },
           ],

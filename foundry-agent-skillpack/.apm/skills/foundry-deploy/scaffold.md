@@ -1,5 +1,7 @@
 # Scaffold: Hosted Agent
 
+> **This page is the container path** (`deploy_mode: container`, Docker + ACR). For the preview **source-code (zip) path** (`deploy_mode: code`, no Dockerfile, Foundry builds the image from your zip), read [code-deploy.md](code-deploy.md) instead. `/plan-agent` Step 0c asks which path; `/prepare-deploy` Step 1 forks on the chosen `deploy_mode`.
+
 Two template families:
 
 | Template | When | Files |

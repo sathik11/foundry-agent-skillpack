@@ -18,11 +18,11 @@ Use **foundry-evals** for convergent lifecycle scripts and **foundry-roles** for
 
 ## Step 0 — Role preflight
 
-Check `Azure AI User` on the project. If missing, the wrapper emits a runbook and stops.
+Check `Foundry User` on the project. If missing, the wrapper emits a runbook and stops.
 
 ```bash
 bash .agents/skills/foundry-roles/scripts/preflight-role.sh \
-  "Azure AI User" "<project_arm_scope>" \
+  "Foundry User" "<project_arm_scope>" \
   --action setup-evals --persona DevOps \
   --why "Create continuous-eval rule for ${input:agent_name}"
 ```

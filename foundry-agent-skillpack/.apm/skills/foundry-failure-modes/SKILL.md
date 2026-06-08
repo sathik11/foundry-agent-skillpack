@@ -1,6 +1,6 @@
 ---
 name: foundry-failure-modes
-description: 25 verified failure modes with symptom-to-fix lookup for Foundry hosted agents
+description: 32 verified failure modes (incl. code-deploy preview) with symptom-to-fix lookup for Foundry hosted agents
 ---
 
 # Foundry Failure Modes
@@ -11,7 +11,7 @@ description: 25 verified failure modes with symptom-to-fix lookup for Foundry ho
 |---------|-------|-----|
 | 400 on version create | Env var prefix or missing metadata | Remove `FOUNDRY_*`/`AGENT_*` prefixes |
 | Version `failed` | ImageError → AcrPull; other → docker test | Grant AcrPull to Project MI, POST new version |
-| 403 at runtime | Instance MI roles at account scope | Grant `Azure AI User` at **account** scope |
+| 403 at runtime | Instance MI roles at account scope | Grant `Foundry User` at **account** scope |
 | Model 400 on sub-agent | Model mismatch | `SUBAGENT_MODELS` mapping per agent |
 | Sync timeout | Pipeline >120s | Use `"stream": true` |
 | Fabric returns 0 rows | NL2SQL non-determinism | Implement deterministic fallback |
@@ -20,6 +20,10 @@ description: 25 verified failure modes with symptom-to-fix lookup for Foundry ho
 | Sub-agent fails randomly | Transient platform errors | Retry 5x with exponential backoff |
 | Eval shows "Failed" | No-data (not broken) | Generate traffic, next run picks it up |
 | Teams `@mention` types but never replies (private Foundry) | Inbound chain missing OR reply FQDNs blocked | Stand up reverse proxy per [inbound-firewall.md](../foundry-teams-workiq/inbound-firewall.md); confirm `smba.trafficmanager.net` + `login.botframework.com` allow-listed |
+| 401 on code-deploy create / `code:download` | Token issued for wrong audience | `az account get-access-token --resource https://ai.azure.com` (F-28) |
+| Code version stuck in `creating` >10 min | `remote_build` can't resolve a dep | Switch to `dependency_resolution: bundled` (F-25) |
+| `ModuleNotFoundError` at first invoke | Wrong wheel platform / raw `.whl` in `packages/` | Rebuild with `--platform manylinux2014_x86_64 --only-binary=:all:` (F-26) |
+| Identical zip redeploy = no new version | Content-addressable dedup (expected) | Compare zip SHA-256 + manifest; not a regression |
 
 ## Deployment Failures
 
@@ -30,7 +34,7 @@ description: 25 verified failure modes with symptom-to-fix lookup for Foundry ho
 
 ## Runtime Failures
 
-- **F-06 Container boots then 403**: `Azure AI User` missing at **account** scope (not just project)
+- **F-06 Container boots then 403**: `Foundry User` missing at **account** scope (not just project)
 - **F-07 Model 401/403**: `Cognitive Services OpenAI User` missing at account scope
 - **F-08 Model mismatch 400**: `model` in request must exactly match sub-agent's configured model
 - **F-09 120s sync timeout**: Use SSE streaming for multi-agent pipelines
@@ -62,3 +66,27 @@ description: 25 verified failure modes with symptom-to-fix lookup for Foundry ho
   - **Root cause (outbound leg)**: Inbound chain is fine, agent processes the activity, but its egress firewall blocks `smba.trafficmanager.net` (the reply queue), so the reply is silently dropped.
   - **Fix**: Front the private agent with a customer-owned reverse proxy that validates the Bot Framework JWT and forwards to the Foundry PE. Paste-ready APIM v2 + VNet integration scaffold + decision matrix in [foundry-teams-workiq/inbound-firewall.md](../foundry-teams-workiq/inbound-firewall.md). Verify with `probe-inbound-chain.sh <agent_path> <custom_domain>` (3 probes; non-zero exit on any deviation).
   - **Allowlist `smba.trafficmanager.net` + `login.botframework.com`** on the agent's egress firewall before declaring health — see [foundry-prod-readiness/networking.md § Firewall allowlist](../foundry-prod-readiness/networking.md#firewall-allowlist-byo-vnet--azure-firewall).
+
+## Source-code Deploy (preview) Failures
+
+See [foundry-deploy/code-deploy.md](../foundry-deploy/code-deploy.md) for the full preview surface. These eight modes only apply when `agent-capabilities.yaml deploy_mode: code`.
+
+- **F-21 `400 CPU and Memory must be specified as a valid resource tier`** on Create/Update: `cpu` / `memory` in `metadata.json` are not a recognized sandbox-size pair. Pick from [Hosted-agent sandbox sizes](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents#sandbox-sizes); commonly `cpu: "1.0", memory: "2.0Gi"` for small agents.
+- **F-22 `400 Agent version is still being provisioned`** on invoke: an invoke landed during a version swap. Poll `GET /agents/{name}?api-version=2025-11-15-preview` until `versions.latest.status == "active"`, then retry. Skip during smoke tests immediately after deploy.
+- **F-23 `424 session_not_ready`** on invoke: container started but the readiness probe never returned `200`. Capture `x-agent-session-id` from the 424 response and stream container logs via `GET $ENDPOINT/agents/$AGENT/sessions/<sessionId>:logstream?api-version=2025-11-15-preview` (no preview header needed). Most common cause: app crashes on import (missing env var, bad model deployment name, syntax error in `main.py`).
+- **F-24 `409 conflict` on DELETE — `Agent has active sessions`**: the agent has in-flight sessions. To cascade-delete idle + active sessions, append `&force=true` to the DELETE URL. **Irreversible** — never use in CI on a shared environment without an explicit confirmation gate.
+- **F-25 Code version stuck in `creating` >10 min** (`dependency_resolution: remote_build`): the service can't resolve a pip / NuGet dependency (private feed, network egress block, or a package that needs a system library). Switch to `dependency_resolution: bundled` and ship a prebuilt `packages/` (Python) or publish output (.NET). See [code-deploy.md § Packaging](../foundry-deploy/code-deploy.md#packaging).
+- **F-26 `ModuleNotFoundError` at runtime** (`dependency_resolution: bundled`): wheels in `packages/` were built for the wrong platform/Python — typically Windows binaries or source-only packages on a Mac/Windows dev box. Rebuild from a Linux container or with the explicit platform tag:
+  ```bash
+  pip install -r requirements.txt --target packages/ \
+    --platform manylinux2014_x86_64 --python-version 3.13 \
+    --implementation cp --only-binary=:all:
+  ```
+  `--only-binary=:all:` forces wheels (no source builds). Verify `packages/` contains **extracted modules**, not raw `.whl` files (a common scripting bug — `pip download` produces `.whl`s, not what the runtime needs).
+- **F-27 `409 AgentNotCodeBased`** on `GET .../code:download`: agent was deployed via `container_configuration` (Docker image), not `code_configuration`. There is no zip to download. Check `agent-status.json deploy.deploy_mode` — if it's `container`, use `azd ai agent show` + ACR pull instead.
+- **F-28 `401 Unauthorized` on agent Create / Update / `code:download`**: token issued for the wrong audience. Foundry control-plane writes require an `https://ai.azure.com` audience token, NOT `https://management.azure.com`. Fix:
+  ```bash
+  TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
+  ```
+  If the call is `403 Forbidden` instead of `401`, see TD-30: caller needs `Foundry Project Manager` at project scope to deploy code-based agents. Run `.agents/skills/foundry-roles/scripts/preflight-role.sh project foundry-project-manager <sub> <rg> <account> <project>`.
+

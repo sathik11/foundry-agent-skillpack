@@ -32,7 +32,7 @@ Do this **before** loading any project files — it is cheap and prevents wastin
    .agents/skills/foundry-roles/scripts/preflight-roles.sh prepare-deploy \
        <target.subscription> <target.resource_group> <target.foundry_account> <target.project>
    ```
-   If exit non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key lists exactly which roles are missing. Required minimums: `Contributor` on the RG (for `azd up`) and `Azure AI Developer` on the project (for agent management).
+   If exit non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key lists exactly which roles are missing. Required minimums: `Contributor` on the RG (for `azd up`) and `Foundry Project Manager` on the project (for hosted-agent create + version env-var writes; previously `Azure AI Developer` was listed here, which Microsoft Learn explicitly calls insufficient for hosted agents — see TD-30).
 3. **azd + `azure.ai.agents` extension preflight.** Verify `azd` is on PATH and the agent extension is at least `0.1.27-preview`. Earlier versions (e.g. `0.1.25-preview`) use the **deprecated Azure Container Apps backend** and will fail later at Step 6's `azd up` against the current hosted-agents control plane.
    ```bash
    # azd CLI must be installed.
@@ -54,21 +54,22 @@ Do this **before** loading any project files — it is cheap and prevents wastin
 
 ---
 
-## Step 1 — Detect agent kind
+## Step 1 — Detect agent kind + deploy mode
 
 Inspect `${input:agent_path}`:
 
-| If you see... | Kind | Go to |
-|---|---|---|
-| `agent.yaml` with `kind: hosted` (or `Dockerfile` + `main.py`) | **Hosted (container)** | Track H |
-| `agent-definition.yaml` (or `agent.yaml` with `kind: prompt`), no Dockerfile | **Prompt (definition-only)** | Track P |
-| Both / neither / ambiguous | STOP | Ask user which they intended; offer to re-run `/plan-agent` |
+| If you see... | Kind | Deploy mode | Go to |
+|---|---|---|---|
+| `agent.yaml` with `kind: hosted` + `Dockerfile` + `agent-capabilities.yaml deploy_mode: container` (or absent) | **Hosted (container)** | container | Track H-Container |
+| `agent.yaml` with `kind: hosted` + `agent-capabilities.yaml deploy_mode: code` + `main.py` (or `*.csproj`) + `requirements.txt` (or `*.csproj`) + **NO Dockerfile** | **Hosted (code-zip, preview)** | code | Track H-Code |
+| `agent-definition.yaml` (or `agent.yaml` with `kind: prompt`), no Dockerfile, no code: block | **Prompt (definition-only)** | n/a | Track P |
+| Both / neither / ambiguous (e.g. `deploy_mode: code` AND a Dockerfile present, or `deploy_mode: code` AND `code:` block missing required fields) | STOP | n/a | Ask user which they intended; offer to re-run `/plan-agent` |
 
-State the detected kind back to the user before continuing.
+State the detected kind **and** deploy mode back to the user before continuing. For code-deploy, also state the `code.runtime` + `code.dependency_resolution` values.
 
 ---
 
-## Track H — Hosted agent preflight
+## Track H-Container — Hosted (Docker image) agent preflight
 
 Validate every item below. Report a checklist (✅/❌). On any ❌, print the fix and STOP.
 
@@ -108,6 +109,51 @@ Validate every item below. Report a checklist (✅/❌). On any ❌, print the f
 
 - [ ] No imports from sibling agent folders or shared parents
 - [ ] Reference data baked into `./data/` (if used)
+
+---
+
+## Track H-Code — Hosted (source-code zip, preview) preflight
+
+> Triggered when Step 1 sees `agent-capabilities.yaml deploy_mode: code`. Read [foundry-deploy/code-deploy.md](../skills/foundry-deploy/code-deploy.md) for the full preview surface. All gates below MUST be ✅ before continuing — on any ❌, print the fix and STOP.
+
+### H6. `agent-capabilities.yaml` (`code:` block)
+
+- [ ] `deploy_mode: code`
+- [ ] `code.runtime` ∈ {`python_3_13`, `python_3_14`, `dotnet_10`} — earlier versions are NOT supported on preview
+- [ ] `code.entry_point` present (Python: file path e.g. `main.py`; .NET: published assembly e.g. `MyAgent.dll`)
+- [ ] `code.dependency_resolution` ∈ {`remote_build`, `bundled`}
+- [ ] `code.protocol` ∈ {`responses`, `invocations`}
+- [ ] NO sibling `Dockerfile` in `${input:agent_path}` (mutually exclusive with `deploy_mode: code`)
+
+### H7. Zip layout
+
+- [ ] Build the zip (or use the existing `agent-code.zip`) and verify its top level is **flat**: `unzip -l agent-code.zip | head -20` must NOT show a single common prefix folder. Most common bug: `agent-code.zip → my-agent/main.py` instead of `agent-code.zip → main.py`.
+- [ ] `entry_point` file exists at the zip root (Python) or matches the published assembly name (.NET).
+- [ ] Zip size ≤ 250 MB (multipart upload limit). `ls -lh agent-code.zip`.
+
+### H8. Dependency strategy
+
+If `dependency_resolution: remote_build`:
+- [ ] `requirements.txt` (Python) or `*.csproj` (.NET) present at the zip root
+- [ ] No `packages/` (Python) or `publish/` (.NET) directory shipped — that's the `bundled` shape
+
+If `dependency_resolution: bundled`:
+- [ ] **Python**: `packages/` directory present and contains **extracted modules** (e.g. `packages/azure/identity/__init__.py`), NOT raw `.whl` files. If `find packages -name '*.whl'` returns anything, STOP — rebuild with `pip install -r requirements.txt --target packages/ --platform manylinux2014_x86_64 --python-version <matches code.runtime> --implementation cp --only-binary=:all:`.
+- [ ] **.NET**: zip contents look like `dotnet publish -c Release -r linux-x64 --self-contained false` output (i.e. `.dll` + `.runtimeconfig.json` at root).
+
+### H9. Runtime matches `code.runtime`
+
+- [ ] If `code.runtime == python_3_13`: any local `.python-version` or `pyproject.toml` Python requirement is compatible with 3.13. If `code.runtime == dotnet_10`: `*.csproj` `<TargetFramework>` is `net10.0`.
+
+### H10. azd extension supports `--deploy-mode code`
+
+Step 0's `0.1.27-preview` floor covers most callers. If `azd ai agent init --deploy-mode code --help` returns an "unknown flag" error, the local extension predates the code-deploy preview — STOP and run `azd ext upgrade azure.ai.agents`.
+
+### H11. Caller-side SDK floor (only if you run code-deploy helpers locally)
+
+The skillpack's default caller-side floor is `azure-ai-projects>=2.0.0,<3`. For machines that invoke `project.beta.agents.create_version_from_code` / `download_code` directly (i.e. running CI helpers for the code-deploy path), bump to `>=2.2.0,<3` and build the client with `allow_preview=True`. See [foundry-deploy/runtime-dependencies.md § Caller-side dependencies](../skills/foundry-deploy/runtime-dependencies.md#caller-side-dependencies).
+
+✅ **Checkpoint.** Manifest `code:` block is valid, zip layout is flat at root with the right shape for the chosen `dependency_resolution`, runtime matches, and azd extension supports the flag.
 
 ---
 
@@ -154,6 +200,14 @@ Print a summary table and ask:
 Load `${input:agent_path}/agent-capabilities.yaml`. If missing, treat the agent as having no declared capabilities (toolbox/fabric/teams/guardrails/purview gates skipped) and warn the user that the agent will deploy without any capability gates.
 
 Validate `agent_kind` matches the kind detected in Step 1. If mismatch, STOP.
+
+**Cached topology cross-check (additive — opt-in).** If `./assessment/project-topology.json` exists in the current working directory (typically because the user ran `/assess-project` earlier), load it and cross-check declared capabilities against observed topology. For each warning case below, print a one-line warning but do NOT block:
+
+- `agent-capabilities.yaml` declares `knowledge.sources[]` of type `ai_search` but the topology JSON has no `AzureAISearch` connection → ⚠ "declared AI Search source has no matching connection on project — `/configure-rbac` will likely emit a runbook".
+- Topology JSON has `capabilityHosts[]` bound (memory / thread / vector) but `agent-capabilities.yaml` does NOT mention them → ⚠ "project has bound capability hosts that this agent does not declare; agents on the same project share thread / vector state — confirm this is intentional".
+- Topology JSON `NETWORK_CLASS` mismatches `network.class` in the manifest → ⚠ "manifest claims `<x>` but observed topology is `<y>` — re-run `/assess-project` if the project changed".
+
+Stamp the cross-check verdict (`matched` / `mismatch_warned` / `no_cached_topology`) into `agent-status.json` under `preflight.topology_crosscheck` (additive — see [agent-status-schema.md](../skills/foundry-deploy/agent-status-schema.md)). If no cached topology exists, skip silently — this is opt-in and `/assess-project` is not a hard prerequisite for `/prepare-deploy`.
 
 **Initialize agent-status.json** (idempotent — no-op if it already exists):
 
@@ -249,14 +303,14 @@ Validate:
 - [ ] `infra.provider: bicep`, `infra.path: ./infra` exists
 - [ ] **Bicep params** (in `./infra/main.parameters.json` or `./infra/main.bicep`):
   - `ENABLE_HOSTED_AGENTS = true`
-  - `ENABLE_CAPABILITY_HOST = false` ⚠️ (must be false in refreshed preview)
+  - `ENABLE_CAPABILITY_HOST = false` ⚠️ (azd-extension scaffold default — azd does not provision the prerequisite Cosmos/AI Search/Storage resources. The platform supports capability hosts at runtime via `/add-capability-host` after `azd up` — see [`foundry-deploy/capability-host-bootstrap.md`](../skills/foundry-deploy/capability-host-bootstrap.md))
   - `ENABLE_MONITORING = true`
 
 ---
 
 ## Step 4 — RBAC preflight (recap — see Step 0)
 
-The caller-role minimums (`Contributor` on RG, `Azure AI Developer` on project, `AZURE_TENANT_ID` set) were already enforced in Step 0. If Step 2.4 took fork (b) it ALSO enforced `Cognitive Services Contributor` at that point. No additional preflight is required here.
+The caller-role minimums (`Contributor` on RG, `Foundry Project Manager` on project, `AZURE_TENANT_ID` set) were already enforced in Step 0. If Step 2.4 took fork (b) it ALSO enforced `Cognitive Services Contributor` at that point. No additional preflight is required here.
 
 The **agent identities** (instance + blueprint) and **project MI** RBAC are auto-assigned by the `azd ai agent` postdeploy hook — those happen *after* `azd up`, not now. The capability-specific grants (Fabric workspace role, CS access, knowledge sources) are applied by `/configure-rbac` post-deploy.
 

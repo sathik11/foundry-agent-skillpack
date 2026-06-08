@@ -3,13 +3,64 @@ description: Plan a Foundry agent end-to-end — fork between scaffolding new co
 input:
   - agent_name: "Name for the agent (kebab-case, e.g. learn-agent)"
   - description: "One-line description of what this agent does and which tools/data it needs"
+  - operator_mode: "true|false — when true (default), downstream grant scripts attempt the action first and only emit runbooks on 403. Set 'false' for SOC-monitored environments where unauthorized attempts trigger alerts. Stamped into agent-capabilities.yaml so /prepare-deploy, /configure-rbac, /setup-purview, and /publish-teams all honor it. (optional, default 'true')"
 ---
 
 # Plan Agent: ${input:agent_name}
 
 You are a Foundry Agent Engineer. Use the **foundry-patterns** skill.
 
-## Step 0 — Fork: existing code or scaffold new?
+> **Anti-synthesis guard.** For Steps 0a and 0b you MUST gather facts via the listed MCP tools. Do NOT shell out (`az`, `curl`, `python -c`), and do NOT echo example values from other skills, recipes, or fixture READMEs. Treat every value the user has not explicitly confirmed as unknown.
+
+## Step 0a — Target discovery + caller-role preflight
+
+Before touching any files, discover the deployment target and confirm the caller has the rights to plan.
+
+0. **Check for cached project topology (opt-in fast path).** If `./assessment/project-topology.md` and `./assessment/agent-capabilities.draft.yaml` both exist in the current working directory (typically because the user ran `/assess-project` first), parse them:
+   - Read `target:` (subscription / resource group / foundry account / project / location) from `agent-capabilities.draft.yaml`.
+   - Read the verdict table from `project-topology.md` and show the ✅/⚠/❌ summary inline.
+   - Skip Steps 1–3 below and ask the user once: "I found a project assessment in `./assessment/`. Use these values as the target, or run discovery again?" Default to the cached values. Re-prompt only for fields the stub left as `TODO`.
+   - When cached values are used, jump to Step 4 (Batch role check) with the loaded target.
+
+1. **Subscription.** If the user did not pass `subscription=`, list subscriptions with `mcp_azure_mcp_subscription_list` and show a numbered picklist. **Wait for the user's selection.** Never auto-pick.
+2. **Resource group.** Run `mcp_azure_mcp_group_list subscription=<sub>` and show a numbered picklist scoped to the chosen subscription. **Wait for selection.** If the user types a name that is not in the list, do NOT silently create it — ask for confirmation.
+3. **Discover all target resources in one call.** Run:
+   ```bash
+   .agents/skills/foundry-deploy/scripts/discover-target.sh <subscription_id> <resource_group>
+   ```
+   This discovers the Foundry account, project, ACR, and model deployments — all as KEY=VALUE pairs. If `DISCOVERY_STATUS=partial`, show the user what's missing and ask how to proceed. If multiple accounts/projects exist, the script lists all and picks the first — confirm with the user.
+4. **Batch role check.** Run:
+   ```bash
+   .agents/skills/foundry-roles/scripts/preflight-roles.sh plan-agent <subscription_id> <resource_group> <foundry_account> <project>
+   ```
+   If it exits non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key tells you exactly which roles are missing.
+5. **Stamp the manifest.** Create `agents/${input:agent_name}/agent-capabilities.yaml` if it does not exist, then write:
+   - `operator_mode: ${input:operator_mode}` — at the top of the file, before `target:`. Defaults to `true` when the input is omitted. When `true`, downstream grant scripts attempt the action first and only fall back to a runbook on 403. When `false`, scripts skip the attempt and emit a runbook directly (use for SOC-monitored environments). See [`foundry-roles/operator-mode.md`](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-roles/operator-mode.md) for the full pattern.
+   - `target:` block from the discovered values. This file is the single source of truth for sub/RG/project across the whole lifecycle — `/prepare-deploy` reads it and only re-prompts on missing fields.
+
+✅ **Checkpoint.** `agent-capabilities.yaml` exists with a populated `target:` block. The user has confirmed the discovered values.
+
+## Step 0b — Model selection
+
+Auto-select the model deployment. Run:
+
+```bash
+.agents/skills/foundry-deploy/scripts/select-model.sh <subscription_id> <resource_group> <foundry_account> [<deployment_name_hint>]
+```
+
+The script auto-selects when unambiguous:
+- If a hint is given and exists → uses it.
+- If only one deployment exists → uses it.
+- If multiple exist → picks the first agents-capable one.
+- Only when `MODEL_SELECTION_METHOD=manual-needed` do you need to ask the user to choose.
+
+Write the resulting `model:` block to `agent-capabilities.yaml` using the `MODEL_DEPLOYMENT_NAME`, `MODEL_NAME`, and `MODEL_VERSION` output.
+
+If no deployments exist at all, fall back to the full model-selection flow in [`foundry-deploy/model-selection.md`](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/model-selection.md): catalog browse → deploy-with-consent (gated by `Cognitive Services Contributor` + quota check + explicit `y/N`) → runbook.
+
+✅ **Checkpoint.** `model.deployment_name` is populated. Templates in Track B will substitute it for `${MODEL_DEPLOYMENT_NAME}`.
+
+## Step 0c — Fork: existing code or scaffold new?
 
 Ask the user **once**:
 
@@ -36,8 +87,13 @@ Ask the user **once**:
    - Deterministic logic that can short-circuit the LLM → Pattern 1c (Middleware)
    - All data via Foundry Toolbox MCP → Pattern 1b/1g
    - External MCP server (Microsoft Learn, GitHub, custom) → Pattern 1a + `client.get_mcp_tool(...)` (see **foundry-deploy** [external-mcp.md](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/external-mcp.md))
+   - Multiple agents needed (orchestrator + siblings, sequential or parallel) → Pattern 2a/2b/2c. Switch to the **foundry-multi-agent** skill for sub-agent invocation, the inter-tool data buffer (>25 records / >20KB), and SSE streaming (>120s pipelines). For an end-to-end walkthrough see [Recipe 06](../../../foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/06-multi-agent-orchestration.md).
    Confirm with the user before generating files.
-2. **Copy templates** from `foundry-deploy/templates/` and substitute placeholders:
+2. **Pick the deploy mode.** Ask the user **once**:
+   > Container image (Docker + ACR — default) or source-code zip (preview, Foundry builds the image from a `main.py` + `requirements.txt`)?
+   - **Container** (default; back-compat) → continue with Step 3 below.
+   - **Source-code zip** (preview) → skip Step 3, jump to **Step 3-Code** below. Confirm with the user that they understand it's a preview surface (`api-version=2025-11-15-preview`, requires `Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview` on every mutating call, content-addressable versioning).
+3. **Copy container templates** from `foundry-deploy/templates/` and substitute placeholders:
    ```bash
    AGENT=agents/${input:agent_name}
    mkdir -p "$AGENT"
@@ -47,9 +103,32 @@ Ask the user **once**:
    cp .agents/skills/foundry-deploy/templates/requirements.txt.template "$AGENT/requirements.txt"
    ```
    Then substitute `${AGENT_NAME}`, `${MODEL_DEPLOYMENT_NAME}`, `${INSTRUCTIONS}`, `${AGENT_DESCRIPTION}`, `${ACR_NAME}` in each file.
-3. **Add `tools.py`** — one `@tool` stub per capability identified in the description.
-4. **Write INSTRUCTIONS** based on "${input:description}": role, tool-use rules, output format.
-5. If guardrails declared (Step 4): also `cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"` and uncomment the middleware lines in `main.py`.
+
+3-Code. **Copy source-code (zip) templates** — no Dockerfile, no ACR. Read [foundry-deploy/code-deploy.md](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/code-deploy.md) first.
+   ```bash
+   AGENT=agents/${input:agent_name}
+   mkdir -p "$AGENT"
+   cp .agents/skills/foundry-deploy/templates/agent.yaml.template       "$AGENT/agent.yaml"
+   cp .agents/skills/foundry-deploy/templates/main.py.template          "$AGENT/main.py"
+   cp .agents/skills/foundry-deploy/templates/requirements.txt.template "$AGENT/requirements.txt"
+   # Do NOT copy Dockerfile.template. Track H-Code of /prepare-deploy will STOP if it sees one.
+   ```
+   Then write `agent-capabilities.yaml` with the `deploy_mode` block (defaults for Track B-Code):
+   ```yaml
+   deploy_mode: code
+   code:
+     runtime: python_3_13          # ask user: python_3_13 | python_3_14 | dotnet_10
+     entry_point: main.py
+     dependency_resolution: remote_build   # default; switch to 'bundled' only if air-gapped or specific pin needs
+     protocol: responses
+   ```
+   Optionally scaffold with the azd CLI instead:
+   ```bash
+   azd ai agent init --deploy-mode code --runtime python_3_13 --entry-point main.py --dep-resolution remote_build
+   ```
+4. **Add `tools.py`** — one `@tool` stub per capability identified in the description.
+5. **Write INSTRUCTIONS** based on "${input:description}": role, tool-use rules, output format.
+6. If guardrails declared (Step 4): also `cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"` and uncomment the middleware lines in `main.py`.
 
 ## Track C — Prompt agent (no container)
 
@@ -67,7 +146,7 @@ Ask the user, one at a time, which capabilities this agent needs. Skip any the u
 5. **Purview / DLP?** → ask only `audit_required` and `dlp.enabled`. If user says yes to DLP, print the preview-limitation callout from **foundry-purview** Phase A and require explicit acknowledgement.
 6. **Eval role?** → orchestrator | ingestion | enrichment | narrative | prompt.
 
-Write the answers to `agents/${input:agent_name}/agent-capabilities.yaml`. Set `agent_kind` to match the track (`hosted` for A/B, `prompt` for C). Omit blocks the user said no to — omission is the default, do not write `enabled: false`.
+Write the answers to `agents/${input:agent_name}/agent-capabilities.yaml` — **merging into the existing `target:` and `model:` blocks written by Steps 0a/0b**, never overwriting them. Set `agent_kind` to match the track (`hosted` for A/B, `prompt` for C). Omit blocks the user said no to — omission is the default, do not write `enabled: false`.
 
 ## Step 5 — Wire only declared capabilities
 

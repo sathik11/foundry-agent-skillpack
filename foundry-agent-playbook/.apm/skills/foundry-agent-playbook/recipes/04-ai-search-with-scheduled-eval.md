@@ -1,5 +1,5 @@
 ---
-validity_date: 2026-05-14
+validity_date: 2026-06-08
 audience: You have (or can create) an AI Search index; want a published-version gate
 duration: ~45 minutes
 surfaces: [agent_framework_runtime, ai_search_direct, scheduled_eval]
@@ -98,7 +98,7 @@ azd up
 
 The preflight verifies:
 - `ai_search_direct`: search service exists, RBAC enabled, index present, semantic ranker available.
-- `evals.scheduled`: `Azure AI User` on the project, judge model deployed, dataset file readable.
+- `evals.scheduled`: `Foundry User` on the project, judge model deployed, dataset file readable.
 
 Common ❌:
 - "Index `docs-v2` not found" — case-sensitive; verify exact name.

@@ -50,6 +50,15 @@ If the symptom doesn't match any known failure:
    ```
 4. Report findings and suggest next investigation step
 
+### Scenario 4 hook — symptom matches a topology gap pattern
+
+If the symptom contains any of `eval traces missing`, `continuous-eval not appearing`, `no rule fired`, `capability host`, `thread store unavailable`, `connection not found`, `AzureAISearch not bound`, `capabilityHost`, `Foundry-grade`, OR the failure-modes match was inconclusive AND the symptom mentions a *missing resource* shape, re-check the project topology before going deeper:
+
+- If `./assessment/project-topology.json` exists in CWD, read it and look for ❌ / ⚠ verdicts in the matching category. Surface the verdict + reference inline.
+- Otherwise, suggest running `/assess-project subscription_id=<sub> resource_group=<rg>` first — many "agent runs but the eval / knowledge / memory path is empty" symptoms reduce to a missing project-level binding the failure-modes catalog cannot see.
+
+This is opt-in and additive. Continue with Step 4 if topology is clean.
+
 ## Step 4 — Document New Failure
 
 If this is a genuinely new failure mode, suggest adding it to the failure-modes catalog

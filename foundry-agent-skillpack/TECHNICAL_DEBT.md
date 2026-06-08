@@ -544,3 +544,279 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 - Adopting AGT's SPIFFE/DID identity primitive for Foundry agents. Foundry agents already have Entra Agent ID + project/agent/application identity flip — the Microsoft-native model. AGT's identity model is for cross-cloud / multi-runtime scenarios where Entra is not the issuer.
 
 
+## TD-30 — Foundry RBAC role rename + `Azure AI Developer` misuse (CLOSED in v0.24.0)
+
+**Status (v0.24.0):** Closed. Two parallel issues fixed in one pass after a Microsoft Learn re-verification on 2026-06-08.
+
+**Issue 1 — Rename.** Microsoft renamed four built-in Foundry data-plane roles (role IDs and permissions unchanged):
+
+| Old name | New name | Role definition ID |
+|---|---|---|
+| Azure AI User | **Foundry User** | `53ca6127-db72-4b80-b1b0-d745d6d5456d` |
+| Azure AI Owner | **Foundry Owner** | `c883944f-8b7b-4483-af10-35834be79c4a` |
+| Azure AI Account Owner | **Foundry Account Owner** | `e47c6f54-e4a2-4754-9501-8e0985b135e1` |
+| Azure AI Project Manager | **Foundry Project Manager** | `eadc314b-1a2d-4efa-be10-5d325db5065e` |
+
+Microsoft Learn ([rbac-foundry](https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry#built-in-roles), [quickstart](https://learn.microsoft.com/azure/foundry/tutorials/quickstart-create-foundry-resources#for-administrators---grant-access)) notes: *"You might still see the previous names in some places while the rename rolls out. … use the role definition ID (GUID) instead of the role name in your code to avoid issues during the rename rollout."*
+
+**Issue 2 — `Azure AI Developer` is wrong for hosted agents.** [Hosted agent permissions reference](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions) is explicit: *"Although it might sound like an appropriate role for a developer working with Hosted agents, the **Azure AI Developer** built-in role is insufficient for Hosted agent scenarios. This role is scoped to Azure Machine Learning and Foundry hubs, not to the Foundry project resources used by Hosted agents."* We were using `Azure AI Developer` as the `prepare-deploy` minimum on the project (wrong) and as a per-agent SP grant (wrong — `Foundry User` is the only documented per-agent runtime role).
+
+**Close-out (what shipped in v0.24.0):**
+
+1. **Prose** — every `.apm/` doc and prompt that named one of the four roles now uses the new `Foundry *` name, with a one-line rollout note explaining the rename + per-row role-ID column added to [foundry-roles/role-matrix.md](.apm/skills/foundry-roles/role-matrix.md).
+2. **Scripts that grant** ([foundry-identity/scripts/grant-rbac.sh](.apm/skills/foundry-identity/scripts/grant-rbac.sh)) — switched from role name to role **GUID** in every `az role assignment create` per Microsoft Learn's explicit guidance.
+3. **Scripts that preflight** ([foundry-roles/scripts/preflight-role.sh](.apm/skills/foundry-roles/scripts/preflight-role.sh)) — now alias-aware: accepts either the old or new role name as input, and matches against either name (or the role-definition ID) returned by `az role assignment list`. Required because tenants in the middle of the rollout return one or the other depending on backend caching.
+4. **`Azure AI Developer` removed** from `/prepare-deploy` minimums, from the `publish-teams` preflight, from the per-agent grant fan-out, and from the role-matrix Phase 2 table. Replaced with `Foundry Project Manager` (for `prepare-deploy` and `publish-teams`, which need project-config writes on the version) and dropped entirely from the per-agent SP grants (the hosted-agent permissions doc says `Foundry User` is the only role the per-agent SP needs at runtime).
+5. **Playbook recipes 01, 03, 04, 06** updated to the new names (auto-mirrored to the docs site via [`docs/scripts/mirror-recipes.mjs`](../docs/scripts/mirror-recipes.mjs)).
+6. **Docs site** hand-curated pages updated: `docs/src/content/docs/reference/role-matrix.md`, `reference/prompts.md`, `concepts/personas-and-roles.md`.
+
+**Verification:** After install,
+```bash
+grep -RIn --include='*.md' --include='*.sh' --include='*.py' \
+  -E 'Azure AI (User|Owner|Account Owner|Project Manager|Developer)\b' \
+  foundry-agent-skillpack/.apm foundry-agent-playbook/.apm
+```
+should return only the TD-30 entry itself + the `role-matrix.md` rename-note table (the deliberate "previously named …" callout). Anything else is a regression.
+
+**Why the GUID switch is non-optional for the grant path:** When Microsoft drops the old name aliases (planned but no date given), any consumer that pinned an old install with a script doing `az role assignment create --role "Azure AI User" …` will start getting `RoleDefinitionDoesNotExist`. Switching to the GUID future-proofs every grant the skillpack makes.
+
+---
+
+## TD-31 — Source-code (zip) deploy preview path was missing entirely
+
+**Status:** CLOSED in v0.25.0
+
+**Issue:** The skillpack was authored against the original hosted-agents preview, which was **container-only**. Microsoft has since added a parallel **source-code (zip) deploy** path (`POST /agents` with `code_configuration`, multipart `code=@agent.zip`, `Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview`, `api-version=2025-11-15-preview`) — see [Deploy a hosted agent from source code (preview)](https://learn.microsoft.com/azure/foundry/agents/how-to/deploy-hosted-agent-code). Customers on `azd ai agent init --deploy-mode code` had no first-class support; the skillpack would silently route them down the container preflight, fail on missing Dockerfile, or worse, scaffold a Dockerfile they didn't want. Folds in six related must-fix gaps (G-1 through G-6) so the path works end-to-end.
+
+**Close-out** (v0.25.0):
+
+1. **G-1 — first-class code-deploy reference (`code-deploy.md`).** New skill doc `foundry-agent-skillpack/.apm/skills/foundry-deploy/code-deploy.md` covers: when to pick code vs container, manifest `deploy_mode` / `code:` block, SDK Python `project.beta.agents.create_version_from_code` + `download_code` (requires `azure-ai-projects>=2.2.0` + `allow_preview=True`), SDK .NET `CreateAgentVersionFromCode` + `FeaturePolicy`, REST multipart shape with `x-ms-agent-name` + `x-ms-code-zip-sha256`, `azd ai agent init --deploy-mode code`, packaging (flat zip layout, `remote_build` default vs `bundled` with `pip install --target packages/ --platform manylinux2014_x86_64 --python-version 3.13 --implementation cp --only-binary=:all:`), content-addressable versioning, `code:download`, `:logstream`, `&force=true` cascade-delete, 250MB limit, RBAC (Foundry Project Manager + platform-MI Foundry User), troubleshooting table cross-linking F-21–F-28. Router (`foundry-deploy/SKILL.md`) wires the new doc in + critical reminder about deploy_mode + content-addressable versioning. `scaffold.md` opens with a callout pointing code-deploy users here.
+
+2. **G-2 — preview-features header.** `rest-api.md` now documents BOTH `Foundry-Features` header values:
+   - Container path mutating calls → `Foundry-Features: HostedAgents=V1Preview` (unchanged)
+   - Code-deploy path mutating calls → `Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview`
+   - GET / list / version-detail calls require neither.
+   - `:logstream` requires neither.
+
+3. **G-3 — api-version `2025-11-15-preview` for code-deploy.** Container path stays on `api-version=v1`. `rest-api.md` and `version-lifecycle.md` both document the split. `code-deploy.md` uses the preview api-version throughout.
+
+4. **G-4 — content-addressable versioning + drift detection.** `version-lifecycle.md` adds a dedicated section explaining: the service mints a new version **only when the zip's SHA-256 OR the agent definition actually changes**; identical reposts return the existing latest; `versions.latest` does NOT advance. `/audit-drift` MUST compare local zip SHA-256 to `x-ms-code-zip-sha256` on `GET .../code:download` (and local `metadata.json` to server `versions.latest.code_configuration`). `agent-status-schema.md` bumped to **v1.3** (additive — no `schema_version` bump): `deploy.deploy_mode` (`container` | `code`), and for code-deploy `deploy.zip_sha256`, `deploy.runtime`, `deploy.dependency_resolution`. Changelog entry added.
+
+5. **G-5 — eight new failure modes (F-21 through F-28).** `foundry-failure-modes/SKILL.md` description bumped from "25 verified" → "32 verified (incl. code-deploy preview)". New "Source-code Deploy (preview) Failures" section covers:
+   - **F-21** `400 CPU and Memory must be a valid resource tier`
+   - **F-22** `400 Agent version is still being provisioned` on invoke during version swap
+   - **F-23** `424 session_not_ready` → `x-agent-session-id` + `:logstream`
+   - **F-24** `409 Agent has active sessions` on DELETE → `&force=true` cascade
+   - **F-25** Version stuck in `creating` >10 min → switch `remote_build` → `bundled`
+   - **F-26** `ModuleNotFoundError` at runtime → rebuild with `--platform manylinux2014_x86_64 --only-binary=:all:`, verify `packages/` is **extracted modules** not raw `.whl`
+   - **F-27** `409 AgentNotCodeBased` on `code:download` (agent is image-based)
+   - **F-28** `401 Unauthorized` on agent CRUD → token audience must be `https://ai.azure.com`
+   Quick Triage table also extended with 4 fast-path lookups for the most common ones.
+
+6. **G-6 — SDK floor + `allow_preview=True`.** `runtime-dependencies.md` caller-side block calls out the conditional bump: default floor stays `azure-ai-projects>=2.0.0,<3` (most callers only do reads); machines that invoke `project.beta.agents.create_version_from_code` / `download_code` directly must bump to `>=2.2.0,<3`. `sdk-surface.md` adds a "Code-deploy SDK surface (preview)" section pointing to `code-deploy.md` for the full pattern with `allow_preview=True` and the note that `project.agents.*` (no `beta`) remains the correct surface for reads.
+
+**Schema + prompt updates** (the glue that makes the above usable):
+
+- **`capabilities-manifest.md`** schema extended with `deploy_mode: container|code` (default `container`, back-compat) + `code:` block (`runtime`, `entry_point`, `dependency_resolution`, `protocol`). Validation rules: `deploy_mode: code` requires the full `code:` block; INCOMPATIBLE with a sibling `Dockerfile`; `runtime` ∈ {`python_3_13`, `python_3_14`, `dotnet_10`}; `bundled` requires the local build step to have been run before `/prepare-deploy`. New Gate Matrix row (`deploy_mode: code`) covers Phase A (manifest + zip layout + extension version + caller role), Phase B (none — platform-MI auto), Phase C (SHA echo match, first invoke not 424, no `CodeError`).
+- **`/prepare-deploy` Step 1** now forks on `deploy_mode` (in addition to `agent_kind`). New **Track H-Code** (H6-H11) replaces the container H1-H5 when `deploy_mode: code`: manifest `code:` block validation, flat-zip layout check (`unzip -l` MUST NOT show single common prefix folder), dependency-strategy check (`packages/` extracted not `.whl` for Python; `dotnet publish` shape for .NET), runtime match, azd extension `--deploy-mode code` support, caller-side SDK floor note.
+- **`/plan-agent` Track B** asks the deploy_mode question once, then forks into Step 3 (container, default) or **Step 3-Code** (no Dockerfile, no ACR; writes `deploy_mode: code` + `code:` block to manifest; optional `azd ai agent init --deploy-mode code` scaffolder).
+
+**Cross-ref to TD-30:** The deploy-from-code MS Learn doc independently confirms TD-30's role minimums:
+- Caller deploying a code-based hosted agent needs **`Foundry Project Manager`** at project scope (NOT `Azure AI Developer`).
+- The agent's platform-assigned managed identity needs **`Foundry User`** at project scope to call models. Platform assigns this MI automatically.
+
+**Verification:** After install,
+```bash
+# 1. Drift between source-of-truth and installed copies
+node docs/scripts/check-drift.mjs            # expect "no drift detected"
+
+# 2. apm install smoke
+apm install foundry-agent-skillpack --target copilot
+# expect 15 skills + 9 prompts + 1 agent
+
+# 3. Confirm both feature-flag values are documented
+grep -RIn 'Foundry-Features: CodeAgents=V1Preview' foundry-agent-skillpack/.apm/skills/foundry-deploy
+# expect hits in code-deploy.md (multiple) + rest-api.md (1)
+
+# 4. Confirm the schema bump landed
+grep -n 'deploy_mode' foundry-agent-skillpack/.apm/skills/foundry-deploy/capabilities-manifest.md \
+                     foundry-agent-skillpack/.apm/skills/foundry-deploy/agent-status-schema.md \
+                     foundry-agent-skillpack/.apm/prompts/prepare-deploy.prompt.md \
+                     foundry-agent-skillpack/.apm/prompts/plan-agent.prompt.md
+# expect hits in all four
+
+# 5. Confirm new failure modes exist
+grep -nE '^- \*\*F-2[1-8]' foundry-agent-skillpack/.apm/skills/foundry-failure-modes/SKILL.md
+# expect 8 lines (F-21 through F-28)
+```
+
+**Why folding G-1 through G-6 into one TD instead of six:** G-2 (header), G-3 (api-version), G-6 (SDK floor + `allow_preview`) are mechanical prerequisites for G-1 (the doc) to actually be runnable end-to-end. G-4 (content-addressable versioning) and G-5 (new failure modes) only manifest on the code-deploy path, so they have to land in the same release or `/audit-drift` will misreport "no version change" as a regression. Shipping any of these without the others would leave a half-functional preview surface.
+
+
+
+## TD-32 — Pre-development Foundry project topology discovery was missing entirely (CLOSED in v0.26.0)
+
+**What:** The skillpack had no read-only audit surface. `discover-target.sh` answered the deploy-time minimum-set question (account + project + ACR + 1 model deployment); nothing answered the **assessment-time** question — "what is the *full* shape of this Foundry project, and which parts will block, weaken, or simply fail to surface a working agent?" Six recurring scenarios surfaced this gap: portal-provisioned silent gap, missing knowledge connection, joining a 6-month-old project, continuous-eval traces missing, pre-deploy CI gate, pre-sales briefing.
+
+**Status (v0.26.0):** Closed. Ships as a **general skillpack capability** (not just a TD-row internal feature) with explicit docs-site presence under Concepts → [Project assessment](docs/src/content/docs/concepts/project-assessment.md). Six artifacts:
+
+1. **New reference doc:** [`foundry-deploy/project-topology.md`](.apm/skills/foundry-deploy/project-topology.md) — opens with the Foundry Toolkit boundary matrix (Toolkit owns interactive browse / wire / deploy; this skillpack owns verdict + stub + lifecycle integration + CI gate). Lists every resource category, the api-version each is pinned to (`accounts/projects`, `accounts/projects/connections`, `accounts/projects/capabilityHosts`, `accounts/networkInjections` all on `2026-03-01` GA; `accounts/projects/agents` on `v1` via `https://ai.azure.com` audience per F-28), what missing triggers (verdict ✅/⚠/❌), cross-skill ownership map, exit codes (0 / 2 / 3), CI gate pattern.
+2. **New shell script:** [`foundry-deploy/scripts/discover-project-topology.sh`](.apm/skills/foundry-deploy/scripts/discover-project-topology.sh) — single ARM walk emitting KEY=VALUE to stdout, human context to stderr. Eight grouped prefixes: `ACCOUNT_*`, `PROJECT_*`, `CONNECTION_*`, `CAPHOST_*`, `NETWORK_*`, `DEPLOYMENT_*`, `AGENT_*`, `IDENTITY_*`. Foundry-grade gate on `allowProjectManagement`. `set -euo pipefail`. Stderr captured on every `az rest` call per invariant #9. Exit `0` ok / `2` not-foundry-grade / `3` no-account.
+3. **New python formatter:** [`foundry-deploy/scripts/discover-project-topology.py`](.apm/skills/foundry-deploy/scripts/discover-project-topology.py) — consumes the KEY=VALUE stream, emits three artifacts: `project-topology.md` (verdict per category + Top 3 + per-category detail), `project-topology.json` (CI-readable), `agent-capabilities.draft.yaml` (pre-filled stub with `# TODO` markers — non-mutating, manual `mv` to promote).
+4. **New prompt:** [`/assess-project`](.apm/prompts/assess-project.prompt.md) — read-only audit. Steps 0=caller role preflight, 1=shell discovery, 2=python formatter, 3=render md inline + summary, 4=offer handoff to `/plan-agent`. Forbidden shortcuts: no mutations, no fix execution, no model deploy.
+5. **New docs concept page:** [Project assessment](docs/src/content/docs/concepts/project-assessment.md) — surfaces the capability as a general skillpack feature per user direction. Documents all six scenarios verbatim, Foundry Toolkit boundary matrix, verdict rubric, "where this does NOT help" non-goals, lifecycle plug-in points. Added to `astro.config.mjs` sidebar under Concepts.
+6. **Lifecycle integrations:** `foundry-deploy/SKILL.md` router row; `/plan-agent` Step 0a new Step 0 (cached topology fast path — skips re-prompting when `./assessment/` exists); `/prepare-deploy` Step 2.5 new cross-check block (warns on three mismatch patterns, stamps `preflight.topology_crosscheck` additive); `/troubleshoot` Step 3 new Scenario 4 hook (re-checks topology when symptom matches a topology gap pattern). All additive — no schema_version bump.
+
+**Verification:**
+
+```bash
+# 1. Drift check
+node docs/scripts/check-drift.mjs                                              # expect "no drift detected"
+
+# 2. Script syntax
+bash -n foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-project-topology.sh
+python3 -m py_compile foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-project-topology.py
+
+# 3. APM install smoke (expect 15 skills + 10 prompts + 1 agent — prompt +1 from v0.25.0)
+apm install ./foundry-agent-skillpack --target copilot --force
+
+# 4. Confirm router row + reference doc landed
+grep -n 'discover-project-topology\|project-topology.md' foundry-agent-skillpack/.apm/skills/foundry-deploy/SKILL.md
+
+# 5. Confirm integration hooks landed
+grep -n 'project-topology\.json\|project-topology\.md\|assess-project\|/assessment/' \
+  foundry-agent-skillpack/.apm/prompts/plan-agent.prompt.md \
+  foundry-agent-skillpack/.apm/prompts/prepare-deploy.prompt.md \
+  foundry-agent-skillpack/.apm/prompts/troubleshoot.prompt.md
+# expect hits in all three
+```
+
+**Cross-ref to TD-31:** TD-31 introduced the code-deploy path; TD-32 introduces the assessment path that *answers* "is this project ready for either a container OR a code deploy?" The two close together because both surface at the same lifecycle moment (between project provisioning and `/plan-agent`).
+
+**Cross-ref to Foundry Toolkit:** The boundary is explicit in both `project-topology.md` and the docs concept page. We do NOT browse the model catalog, deploy from a card click, or render a Toolboxes UI — Toolkit owns those. We own the verdict, the stub, the cached output that `/plan-agent` / `/prepare-deploy` / `/troubleshoot` reuse, and the CI gate shape.
+
+**Post-write defect fix (real-world test caught it before any external ship):**
+
+Tested against RG `agents-3iq` which has **3 Foundry-grade accounts** (`foundry-res-eastus`, `agents-3iq-eastus2`, `agents-3iq-ncus-2`) plus 1 ContentSafety. The first pass silently picked `foundry-res-eastus` (index 0) and emitted ✅ on Model deployments because there are 20 deployments *in the RG*. The user immediately flagged it: *"what why is there no ask on project name and how is the assessment done across multiple resources/projects in same RG — isn't it going to lose context and lose track here?"* They were 100% right. Per-account walk confirmed dramatic shape variance:
+
+| Account | Connections | CapHosts | Own deployments | Agents |
+|---|---|---|---|---|
+| `foundry-res-eastus` (the silent default) | 3 | 0 | **0** | **0** |
+| `agents-3iq-eastus2` | 9 | 0 | **16** | **3** |
+| `agents-3iq-ncus-2` | 14 | **1** | 4 | 0 |
+
+The silent path would have audited the *emptiest* account while the real workload lives on the other two. Four surgical fixes shipped under the same v0.26.0:
+
+1. **Shell ambiguity gate (exit code 4).** When `$3=HINT_ACCOUNT` is empty AND multiple Foundry-grade accounts exist, the script refuses to pick. It eagerly emits ALL candidates (`ACCOUNT_NAME_<n>=` / `ACCOUNT_KIND_<n>=` / `ACCOUNT_FOUNDRY_GRADE_COUNT=`) to stdout BEFORE exiting 4, so the calling prompt can render a structured picklist programmatically. Same pattern for projects (`PROJECT_NAME_<n>=` before exit 4). **CI must always pass both positionals**; auto-pick is an interactive convenience for `/assess-project`, never a CI default.
+2. **Python deployment verdict.** Rewrote `verdict_deployments` to split own-account vs cross-account counts using new shell signals `DEPLOYMENT_OWN_ACCOUNT_COUNT` / `DEPLOYMENT_OWN_ACCOUNT_NAME`. Old behaviour aggregated all RG deployments and showed ✅ even when the chosen project's account had zero — actively misleading because cross-account references mean extra latency + cross-account RBAC. Now emits ⚠ "Zero deployments on chosen project's account (`<name>`); `<n>` on sibling account(s)" when own=0 AND cross>0; emits ✅ with `(+<n> cross-account in this RG)` suffix when both are present.
+3. **`/assess-project` Step 1 picklist dispatch.** On exit 4, parse `/tmp/topology.kv`, grep `ACCOUNT_NAME_<n>=` siblings, present Foundry-grade-only numbered picklist (non-Foundry shown unpickable for context), wait for user selection, re-invoke the script with chosen account as positional arg 3. Same dispatch for `PROJECT_NAME_<n>=` with arg 4. Frontmatter docs updated: `account_name` / `project_name` are now "REQUIRED only when ambiguous (script exits 4 with picklist; this prompt re-invokes with the user's choice)".
+4. **`foundry-deploy/project-topology.md` exit-codes table.** New row for code 4 describing the ambiguous-state behaviour and the candidate-emission-before-gate contract; explicit CI warning that auto-pick is interactive-only.
+
+**Lesson learned:** Silent auto-pick on ambiguous topology = wrong-project audit. Always emit candidates eagerly to stdout BEFORE the gate so picklists work programmatically *and* the human signal lives on stderr where it belongs. This now becomes a convention any future "single-shape" discovery script in this skillpack must follow.
+
+
+## TD-33 — `/assess-project` was three sequential tool round-trips (CLOSED in v0.26.0)
+
+**Discovered:** Real-world test of TD-32 against `agents-3iq` exposed UX friction. `/assess-project` invoked `preflight-roles.sh`, then `discover-project-topology.sh`, then `discover-project-topology.py` as three separate `run_in_terminal` calls. Each is a turn-of-latency + a separate place to fail silently. The happy path "look at a project" required three round-trips before the user saw anything.
+
+**Root cause:** The prompt was authored as a strictly-composable chain — each script standalone-usable, each invocation visible to the agent. Composability is correct for CI / direct script use, but for an interactive prompt it leaks plumbing into the user-visible tool log.
+
+**Fix shipped under v0.26.0 (folded into the same release as TD-32 since it's the same surface):**
+
+1. **New wrapper:** `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/assess-project.sh`. Single bash entry that runs preflight (best-effort, non-blocking — `assess-project` alias may not exist on older installs of `preflight-roles.sh`), discovery, and formatting in one go. Propagates exit codes (especially exit 4 for ambiguous-account/project picklist dispatch). Emits machine-readable pointers on stdout: `ASSESSMENT_STATUS={ok|ambiguous}`, `ASSESSMENT_REPORT_MD=...`, `ASSESSMENT_REPORT_JSON=...`, `ASSESSMENT_STUB_YAML=...`, `ASSESSMENT_KV_FILE=...`. Stderr tails on failure (invariant #9).
+2. **`/assess-project` prompt slim:** collapsed Steps 0+1+2 (separate preflight + discover + format invocations) into a single Step 1 "run wrapper". Step 2 is now reserved for the exit-4 picklist dispatch only. Step 3 is the verdict render, Step 4 the stub handoff, Step 5 (NEW) the capability-host remediation offer (cross-link to `/add-capability-host`).
+3. **Preflight alias:** added `assess-project` case branch in `preflight-roles.sh` so the wrapper's preflight no longer falls through to "unknown alias" on fresh installs. Documents Reader-on-RG as the required role; non-blocking.
+4. **Forbidden-shortcuts addition:** the prompt now explicitly forbids calling `discover-project-topology.sh` and the Python formatter separately when the wrapper exists — that pattern wastes a round-trip and bypasses the wrapper's stderr-tail safety.
+
+**Net effect:** happy path is 1 tool call (was 3). Ambiguous-account path is 2 (was 3). All exit-code semantics + picklist eager-emit behaviour preserved.
+
+**Verification:**
+```bash
+# Same RG that exposed the issue
+.agents/skills/foundry-deploy/scripts/assess-project.sh \
+  d194e976-63c4-43c9-995a-5340d0daffb1 agents-3iq
+# expect: exit 4, ACCOUNT_NAME_<n>= candidate list on stdout, picklist on stderr
+
+# Disambiguated re-invocation
+.agents/skills/foundry-deploy/scripts/assess-project.sh \
+  d194e976-63c4-43c9-995a-5340d0daffb1 agents-3iq agents-3iq-eastus2
+# expect: exit 0, ASSESSMENT_REPORT_MD=./assessment/project-topology.md
+```
+
+**Cross-ref to TD-32:** TD-32 was the topology-discovery surface; TD-33 is its UX wrapper. They close together because the wrapper would not exist without the underlying script.
+
+
+## TD-34 — `/add-capability-host` real remediation for ⚠ verdicts (CLOSED in v0.26.0)
+
+**Discovered:** Real-world test of TD-32 also exposed that the `Capability hosts` ⚠ verdict pointed only to a doc reference (`capabilities-manifest.md`) with no actionable remediation path. The first reflex was to *soften the verdict to informational* on the grounds that "capability hosts are a preview surface". This was wrong — capabilityHosts are GA at `api-version=2026-03-01` with full BYO support, and `ENABLE_CAPABILITY_HOST=false` in `instructions/foundry-conventions.md` is the **azd-extension scaffold default only** (azd doesn't provision the prerequisite Cosmos / AI Search / Storage resources). The platform fully supports the BYO path at runtime.
+
+**Root cause:** Verdict-softening as a "fix" is a sloppy/lazy shortcut. The user pushed back: *"I see that you often tend to take sloppy lazy route in fixing the problems."* That feedback drove a real remediation: build the missing `/add-capability-host` prompt + mutator + reference doc end-to-end, plus fix two hidden defects exposed during research.
+
+**Defects exposed during research:**
+
+1. `discover-project-topology.sh` only probed **project-level** capabilityHosts (`accounts/{}/projects/{}/capabilityHosts`). It missed **account-level** capabilityHosts entirely. Tested against `agents-3iq-eastus2` which has a bare `default` account-level host — the script reported `Hosts=0` and the verdict was indistinguishable from "no caphost at any scope" (which is a different remediation path).
+2. The verdict text said "memory/thread/vector stores" but `memoryStoreConnections` was deprecated in the `2026-03-01` schema. The shape is now `threadStorageConnections` + `vectorStoreConnections` + `storageConnections` + optional `aiServicesConnections`.
+
+**Fix shipped under v0.26.0:**
+
+1. **Hidden defect — account-level capHost probe.** Modified `discover-project-topology.sh` § 4 to probe BOTH scopes. New signals:
+   - `CAPHOST_ACCOUNT_COUNT`, `CAPHOST_ACCOUNT_<n>_{NAME,KIND,PROV_STATE,THREAD_CONN_COUNT,VECTOR_CONN_COUNT,STORAGE_CONN_COUNT}`
+   - `CAPHOST_PROJECT_COUNT`, `CAPHOST_PROJECT_<n>_{NAME,KIND,PROV_STATE,THREAD_CONNECTIONS,VECTOR_CONNECTIONS,STORAGE_CONNECTIONS,AISERVICES_CONNECTIONS}` (CSV of connection names so the formatter can cross-check `metadata.ResourceId` on each)
+   - Legacy `CAPHOST_COUNT` kept as alias for `CAPHOST_PROJECT_COUNT` (backwards compat with TD-32-initial formatter).
+
+2. **`verdict_capability_hosts` rewrite (Python formatter).** Four-case verdict with specific remediation pointer to `/add-capability-host`:
+   - **neither** → ⚠ "No capability hosts (account or project scope)" + "Run `/add-capability-host`"
+   - **account only** → ⚠ "Account capHost '\<name\>' exists, project capHost missing" + "Run `/add-capability-host --scope project`"
+   - **project only** → ⚠ "Anomalous: project capHost present but no account-level capHost" (shouldn't normally happen)
+   - **both with full BYO** → ✅ "Project capHost '\<name\>' fully wired (thread + vector + storage)"
+   - **both with partial bindings** → ⚠ "BYO bindings partial. Missing: \<list\>. Use `/add-capability-host --force-recreate`"
+
+3. **Hidden defect — `metadata.ResourceId` per connection.** Modified `discover-project-topology.sh` § 3 to emit `CONNECTION_<n>_RESOURCE_ID=` for every connection. Per the Foundry capability-hosts doc, the runtime requires `metadata.ResourceId` to be populated on every connection a capabilityHost references — without it, the PUT succeeds but the runtime silently falls back to default storage. `/add-capability-host` now blocks at preflight if any chosen connection has empty `ResourceId`.
+
+4. **New reference doc:** `foundry-agent-skillpack/.apm/skills/foundry-deploy/capability-host-bootstrap.md`. Sections: why this exists (mode 1 default-managed vs mode 2 BYO), the REST shape at both scopes, naming convention (`account-capability-host` / `project-capability-host`), two-scope ordering rule (account first, 409 otherwise), required connections + `metadata.ResourceId` rule, idempotency contract (no UPDATE — only DELETE + CREATE), RBAC matrix, verification GETs, common failure modes table.
+
+5. **New mutator script:** `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/add-capability-host.sh`. Dry-run by default; live mutation requires explicit `--no-dry-run`. Supports `--scope account|project|both`, `--{thread,vector,storage,aiservices}-conn <name>`, `--auto-pick` (auto-resolve when exactly one connection per category), `--force-recreate` (DELETE + CREATE for partial-bindings cases). Polls `provisioningState` until `Succeeded` (3min timeout). Exit codes: 0 ok / 2 ambiguous-connection (picklist on stdout) / 3 empty-`ResourceId` / 4 already-exists-no-force / 5 dry-run-complete.
+
+6. **New prompt:** `foundry-agent-skillpack/.apm/prompts/add-capability-host.prompt.md`. Seven steps: preflight → cached topology pickup (from `/assess-project`'s JSON) → connection selection (picklist if ambiguous) → dry-run (always first) → render PUT bodies to user → explicit `yes` consent (additional `yes confirm delete` if DELETE is in the plan) → apply with `--no-dry-run` → re-run `/assess-project` to verify ⚠ → ✅. Forbidden shortcuts: never skip dry-run, never silently auto-pick, never pass `--force-recreate` without explicit consent.
+
+7. **Preflight alias:** added `add-capability-host` case branch in `preflight-roles.sh`. Requires Contributor on the Foundry account (capabilityHosts subresource is gated by account-level Contributor, same as connections — `Cognitive Services Contributor` is NOT sufficient, verified during TD-32).
+
+8. **Conventions clarification:** updated `instructions/foundry-conventions.md` § Bicep to explicitly scope `ENABLE_CAPABILITY_HOST=false` to the azd-extension scaffold default only — with a cross-link to `capability-host-bootstrap.md` for the runtime BYO path. Same clarification in `prompts/prepare-deploy.prompt.md` env-var checklist.
+
+9. **`/assess-project` Step 5 (NEW):** offer to hand off to `/add-capability-host` whenever the Capability hosts row is ⚠. Reads `project-topology.json` to pre-resolve all parameters; only proceeds with explicit user consent.
+
+**Bring-your-own (BYO) inline connection create — option (b) extension (same release):** the initial mutator handled only the "pick an existing project connection" path, which would `exit 1` whenever a category had zero connections (forcing the user out to the Foundry portal). User pushback during live test against the empty `foundry-res-eastus` project: *"capability host concept is to bring your own cosmos storage & search right…"* — confirmed against MS Learn (standard-agent-setup; ARM caphosts ref). The script now accepts `--thread-resource-id` / `--vector-resource-id` / `--storage-resource-id` (one ARM ID each) and creates the matching Foundry connection inline before the capHost PUT. Connection bodies were captured live from a working `agents-3iq-ncus-2/proj-agents-ncus-2` project to lock the exact shape:
+
+- Cosmos: `category: "CosmosDb"`, target `https://<name>.documents.azure.com:443/`, 3 metadata keys (`ApiType`, `ResourceId`, `location`).
+- AI Search: `category: "CognitiveSearch"`, target `https://<name>.search.windows.net`, 4 metadata keys (`ApiType`, `ApiVersion: "2024-05-01-preview"`, `DeploymentApiVersion: "2023-11-01"`, `ResourceId`, `location`).
+- Storage: `category: "AzureStorageAccount"`, target `https://<name>.blob.core.windows.net`, 2 metadata keys (`ApiType`, `ResourceId`) — no `location`.
+- All `authType: "AAD"`, `isSharedToAll: true`. `metadata.ResourceId` is the BYO ARM ID itself.
+
+`resolve_binding()` priority per role: (1) `--<role>-conn <name>` matches existing → use, (2) `--<role>-resource-id <arm-id>` → plan inline create, (3) auto-pick if exactly one candidate, (4) multiple candidates no `--<role>-conn` → exit 2, (5) zero candidates no `--<role>-resource-id` → exit 1. ARM provider-segment validation per role (e.g. `--vector-resource-id` must point to `Microsoft.Search/searchServices`). New Step 7a in the script: in `--no-dry-run` mode PUTs each queued connection then re-GETs to confirm `metadata.ResourceId` populated; aborts before capHost PUT on verification failure. Dry-run prints `project connections to CREATE: N` summary and per-connection PUT bodies before the capHost bodies; emits `CONNECTIONS_TO_CREATE_COUNT=` + per-connection `CONNECTION_TO_CREATE_<n>_{NAME,CATEGORY}=` machine-readable lines.
+
+**Latent bug fixed under same release:** wrong category constant `AzureCosmosDb` in the resolution loop (real Foundry API uses `CosmosDb` — confirmed by GET against live project). Would have made `--auto-pick` always fail to find thread connections.
+
+**Prompt + reference doc updated:** `/add-capability-host` prompt grew `thread_resource_id` / `vector_resource_id` / `storage_resource_id` inputs and a Step 2 sub-branch that offers users two options when a category has zero connections (portal create vs. paste ARM ID). `capability-host-bootstrap.md` got a new "Bring-your-own existing Azure resource (inline connection create)" section with per-category PUT body shapes, the 5-step resolution priority, and a note that `aiServices` is intentionally out of scope for inline create.
+
+**Lesson learned:** Before proposing to soften a verdict, verify the platform constraint. "Azd doesn't support it" ≠ "platform doesn't support it." Capability hosts are a first-class GA surface; the only thing missing was the skillpack path to bootstrap them. Real remediation > verdict softening. Also: don't ship a "real fix" that only handles the populated-project case — the empty-project case is the more common entry point and is what BYO is designed for.
+
+**RBAC is load-bearing — `--grant-rbac` flag (same release):** during live test of the BYO path against `agents-3iq-eastus2`, even with all 3 BYO connections created and verified, the project capabilityHost PUT reached `provisioningState=Failed` within ~3 minutes with no actionable diagnostic. Root cause: the project's SystemAssigned MI lacked data-plane RBAC on the backing Cosmos / Search / Storage resources. The platform uses the project MI (not the caller) to bootstrap containers/indexes/blobs during capHost provisioning — without those grants the bootstrap stalls and is reported as `Failed`. Recovery is destructive (DELETE the failed host + re-PUT) AND is blocked once any agent is linked to the failed host, so prevention is the only viable strategy.
+
+The 6 required grants to the project MI (per MS Learn standard-agent-setup Phase 3 + Phase 5):
+
+| # | Role                                  | Plane    | Backing | CLI surface                              |
+|---|---------------------------------------|----------|---------|------------------------------------------|
+| 1 | Cosmos DB Operator                    | Control  | Cosmos  | `az role assignment create`              |
+| 2 | Cosmos DB Built-in Data Contributor   | **Data** | Cosmos  | `az cosmosdb sql role assignment create` (separate CLI surface; not visible to `az role assignment list`) |
+| 3 | Search Service Contributor            | Control  | Search  | `az role assignment create`              |
+| 4 | Search Index Data Contributor         | Data     | Search  | `az role assignment create`              |
+| 5 | Storage Account Contributor           | Control  | Storage | `az role assignment create`              |
+| 6 | Storage Blob Data Owner               | Data     | Storage | `az role assignment create`              |
+
+`add-capability-host.sh` now accepts `--grant-rbac` which, before issuing the capabilityHost PUT, resolves the project MI principalId via `GET project` and issues all 6 grants idempotently (treats `RoleAssignmentExists` as success), then sleeps 30s for AAD propagation. New script Step 4b plans the grants (resolves per-role ARM IDs from `--<role>-resource-id` flags or from the existing connection's `metadata.ResourceId`). New script Step 7b executes them. Dry-run preview lists all 6 planned grants + target ARM IDs. New exit code 6 for grant failure. New KV outputs `GRANT_RBAC_STATUS=ok|skipped` + `GRANTS_COUNT=N`.
+
+The prompt grew a new Step 2.5 ("Confirm RBAC posture") that explains the load-bearing finding and asks the user to pick: `grant` (recommended, sets `grant_rbac=true`), `already granted`, or `skip` (with a warning). New `grant_rbac` input. New forbidden shortcut: *"do not issue the capability-host PUT without verifying the 6 project-MI grants are in place"*. `capability-host-bootstrap.md` got a new "Required project-MI data-plane RBAC (load-bearing)" section with the canonical CLI block and a callout that the Cosmos data-plane role uses a different CLI surface than ARM role assignments. New troubleshooting row covering the `Failed` symptom + the "destructive AND blocked once an agent is linked" recovery wall.
+
+**Lesson learned (RBAC):** ARM role assignments resolve `--assignee <objId>` to `appId` form in the Principal column, which made it impossible to confirm grants by reading `az role assignment list --assignee <objId>` against the project MI's object ID (rows were keyed under the appId form). Always use `--assignee-object-id` to query and grant; the create command additionally requires `--assignee-principal-type ServicePrincipal` to disambiguate. The Cosmos data-plane role is the easy-to-miss gotcha — it doesn't appear in regular RBAC listings, lives only on the Cosmos account as a SQL role assignment, and is the single most common reason a freshly-provisioned project capabilityHost fails.
+
+**Cross-ref to TD-32 / TD-33:** TD-32 surfaced the gap (capability hosts not assessed correctly + no remediation path), TD-33 made the assessment a single-call wrapper, TD-34 closes the loop with a real mutator that supports both "pick existing connection" and "BYO inline create from ARM ID", plus the `--grant-rbac` step that takes the project MI from "no roles" to "fully provisioned" without a second skill invocation. All three close under v0.26.0.

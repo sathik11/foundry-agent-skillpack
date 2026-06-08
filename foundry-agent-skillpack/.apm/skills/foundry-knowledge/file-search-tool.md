@@ -61,7 +61,7 @@ If those don't suit your use case (larger files, custom chunking, custom embeddi
 
 | Identity | Role | Scope | When |
 |---|---|---|---|
-| **Caller** (`basic`) | `Azure AI User` on project | one-time | — |
+| **Caller** (`basic`) | `Foundry User` on project | one-time | — |
 | **Caller** (`standard`) | `Owner` / `UAA` | Search + Storage | one-time, to grant Phase B |
 | **Project MI** (`standard`) | `Search Index Data Contributor` | Search service | runtime |
 | **Project MI** (`standard`) | `Storage Blob Data Contributor` | Storage account | runtime |

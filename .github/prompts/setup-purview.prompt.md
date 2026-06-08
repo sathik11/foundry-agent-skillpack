@@ -16,7 +16,7 @@ Use the **foundry-purview** skill. Be honest about Foundry-specific limitations.
    If not, Purview governance is not available — inform the user and stop.
 
 2. **Role**: Confirm user has `Cognitive Services Security Integration Administrator`
-   or `Azure AI Account Owner` role.
+   or `Foundry Account Owner` role.
 
 ## Step 1 — Flip the Toggle
 

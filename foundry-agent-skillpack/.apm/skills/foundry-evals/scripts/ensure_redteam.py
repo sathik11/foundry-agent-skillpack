@@ -68,7 +68,7 @@ def main() -> int:
         return 3
 
     preflight_role(
-        scope=args.project_scope, role="Azure AI User",
+        scope=args.project_scope, role="Foundry User",
         action="setup-redteam", why=f"Create cloud red-team scan for {args.agent_name}",
     )
 

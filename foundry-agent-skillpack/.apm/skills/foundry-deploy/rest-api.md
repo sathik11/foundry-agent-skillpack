@@ -2,12 +2,16 @@
 
 > APM only **validates** these calls. The `azd ai agent` extension owns the actual writes.
 > Use this doc to debug failures or to script ad-hoc operations outside `azd`.
+>
+> **Two surfaces.** The container path uses `api-version=v1`. The preview source-code (zip) path uses `api-version=2025-11-15-preview` + the `Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview` header on every mutating call. This page covers the container path; for code-deploy REST shapes (multipart body, `x-ms-code-zip-sha256`, `code:download`, `:logstream`), read [code-deploy.md](code-deploy.md).
 
-## Required header (all calls)
+## Required header (all container-path calls)
 
 ```
 Foundry-Features: HostedAgents=V1Preview
 ```
+
+Code-deploy mutating calls require the longer `CodeAgents=V1Preview,HostedAgents=V1Preview` value — see [code-deploy.md § Required preview header](code-deploy.md#required-preview-header). GET / list / version-detail calls do NOT require the header on either path.
 
 ## Endpoints
 

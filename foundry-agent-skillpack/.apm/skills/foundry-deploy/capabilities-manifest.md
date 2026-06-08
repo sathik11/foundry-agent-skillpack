@@ -20,6 +20,19 @@ agents/<name>/
 schema_version: 1
 agent_kind: hosted              # hosted | prompt — must match agent.yaml
 
+# ── Deploy mode (hosted only; written by /plan-agent Step 0c) ────────────
+# Source-of-truth for which deploy path /prepare-deploy will fork on.
+# 'container' (default) — Docker + ACR + container_configuration (api-version=v1).
+# 'code'      — zip + Foundry-built image + code_configuration (api-version=2025-11-15-preview,
+#               requires Foundry-Features: CodeAgents=V1Preview,HostedAgents=V1Preview header).
+# These are MUTUALLY EXCLUSIVE on a single agent version. See foundry-deploy/code-deploy.md.
+deploy_mode: container          # container | code
+code:                           # REQUIRED when deploy_mode == code; OMIT otherwise
+  runtime: python_3_13          # python_3_13 | python_3_14 | dotnet_10
+  entry_point: main.py          # Python: file path. .NET: published assembly name (e.g. MyAgent.dll).
+  dependency_resolution: remote_build   # remote_build (default; service runs pip/dotnet restore) | bundled (you ship prebuilt deps)
+  protocol: responses           # responses | invocations
+
 # ── Operator mode (written by /plan-agent Step 0a) ───────────────────────
 # Controls whether grant scripts attempt actions directly (try-first) or
 # immediately emit runbooks without trying (preflight-only).
@@ -222,12 +235,13 @@ All capability blocks are **optional**. Omit blocks the agent does not use; do n
 
 | Capability | Phase A (pre-`azd up`) | Phase B (`/configure-rbac` post-deploy) | Phase C (`/verify-agent`) | Owning skill |
 |---|---|---|---|---|
+| `deploy_mode: code` | `code:` block complete (`runtime`, `entry_point`, `dependency_resolution`, `protocol`); runtime in supported set (`python_3_13` / `python_3_14` / `dotnet_10`); no sibling `Dockerfile`; zip layout flat at root; `bundled` mode \u2192 `packages/` (Python) or publish output (.NET) present; `azd` extension supports `--deploy-mode code`; caller has `Foundry Project Manager` at project scope | none (platform-assigned MI gets `Foundry User` automatically; verify if `403` on first invoke) | `agent-status.json deploy.deploy_mode == code`; `x-ms-code-zip-sha256` echoed by `code:download` matches local SHA-256; first invoke returns `200` (not `424`); no `CodeError` in version detail | `foundry-deploy` (see [code-deploy.md](./code-deploy.md)) |
 | `toolbox` | URL is real `https://`, no `${VAR}` placeholders; private connections exist | none (covered by Phase 2 RBAC) | `execute_tool` spans for each `server_label` | `foundry-deploy` |
 | `fabric` | Workspace exists; record items + role; **HARD BLOCK if `network.class != public`** (Fabric Data Agent unsupported) | Print Fabric workspace role-assignment steps for instance principal (see Tech Debt) | Hit a Fabric tool, expect `200`, no `403` | `foundry-fabric` |
 | `workiq_teams` | Agent 365 license, bot Entra app, WorkIQ connection | none auto on `/configure-rbac` first pass — `/publish-teams` (TD-2) handles publish, then dispatches `/configure-rbac post_publish=true` to re-fan grants to the application identity | Agent appears in Graph `admin/people/agents`, Teams app status `Allowed`, `publish.rbac_refanned_at` stamped in agent-status.json | `foundry-teams-workiq` |
 | `guardrails` | Middleware wired in `main.py`; CS connection exists; vendored `guardrails.py` present | `Cognitive Services User` to per-agent identity on CS resource | `guardrail.*` spans present; sample blocked input is refused | `foundry-guardrails` |
 | `purview` | Tenant licensing; toggle is ON at Foundry account; declared DLP policies exist (warn if `dlp.enabled` and Foundry preview limits apply) | none auto — toggle is account-scoped | Audit query for `AIInvokeAgent` shows agent within ~30 min | `foundry-purview` |
-| `evals.continuous` | `Azure AI User` on project; judge model deployed; evaluators in catalog (or registered if custom) | none | Rule exists; Monitor tab shows runs after traffic | `foundry-evals` |
+| `evals.continuous` | `Foundry User` on project; judge model deployed; evaluators in catalog (or registered if custom) | none | Rule exists; Monitor tab shows runs after traffic | `foundry-evals` |
 | `evals.scheduled` | Same as continuous + dataset reachable / file present | none | Schedule exists; first run completes per cron | `foundry-evals` |
 | `evals.redteam` | Same as continuous + **project region in supported list** (East US 2 / France Central / Sweden Central / Switzerland West / North Central US) | none | Scan exists; ASR ≤ `pass_threshold.max_attack_success_rate` | `foundry-evals` |
 | `network.class != public` | Run all four network detection scripts; ACR public-access ENABLED; chosen outbound mode honors data residency requirements | Approve managed PEs (`Azure AI Enterprise Network Connection Approver`); link private DNS zones | `nslookup` from inside VNet returns private IP; tool calls succeed | `foundry-prod-readiness` |
@@ -236,6 +250,11 @@ All capability blocks are **optional**. Omit blocks the agent does not use; do n
 ## Validation rules
 
 - `agent_kind` must equal the kind detected in `agent.yaml` / `agent-definition.yaml`.
+- `deploy_mode` only applies when `agent_kind: hosted`. Prompt agents do not have a deploy mode — omit the field.
+- `deploy_mode: code` REQUIRES the `code:` block (`runtime`, `entry_point`, `dependency_resolution`, `protocol`). `/prepare-deploy` STOPs if any of those four fields are missing.
+- `deploy_mode: code` is INCOMPATIBLE with a sibling `Dockerfile` in `${agent_path}` — `/prepare-deploy` Step 1 will flag this as ambiguous (image-based deploy detected alongside `deploy_mode: code`) and STOP.
+- `code.runtime` MUST be one of `python_3_13`, `python_3_14`, `dotnet_10`. Earlier Python or .NET versions are NOT supported on the preview surface.
+- `code.dependency_resolution: bundled` requires the local build step described in [code-deploy.md § Packaging](./code-deploy.md#packaging) to have been run before `/prepare-deploy` (i.e. `packages/` populated for Python, or `publish/` contents for .NET). `/prepare-deploy` checks the zip layout if a built zip is present.
 - `target.*` is REQUIRED once `/plan-agent` has run; `/prepare-deploy` STOPs if missing and re-runs the elicitation. Empty top-level `target:` is acceptable for hand-authored manifests — `/prepare-deploy` Step 2 will fill it interactively.
 - `model.deployment_name` is REQUIRED for hosted (Track H) agents and prompt (Track P) agents. Never auto-fabricated — must come from the [model selection](./model-selection.md) algorithm. /prepare-deploy STOPs if absent.
 - `model.catalog_name` SHOULD match a catalog id; skillpack warns (does not block) if it cannot resolve via `mcp_foundry_mcp_model_catalog_list`.

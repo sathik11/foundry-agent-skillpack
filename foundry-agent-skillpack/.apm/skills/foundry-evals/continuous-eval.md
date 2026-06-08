@@ -52,7 +52,7 @@ The wrapper script [scripts/ensure_continuous_eval.py](scripts/ensure_continuous
 1. Eval object create-or-fetch (so the rule has a stable `eval_id`).
 2. Built-in vs custom evaluator routing.
 3. Idempotent rule create-or-update by name.
-4. Role preflight (`Azure AI User` on project).
+4. Role preflight (`Foundry User` on project).
 
 ## Verification
 
@@ -71,7 +71,7 @@ Or in the portal: agent → **Monitor** tab → eval charts populate within a fe
 | Symptom | Cause | Fix |
 |---|---|---|
 | Rule exists but no runs | Sample rate too low + low traffic | Bump `sample_rate` or generate test traffic |
-| 403 on rule create | Caller lacks `Azure AI User` on project | Run [foundry-roles/scripts/preflight-role.sh](../foundry-roles/scripts/preflight-role.sh) |
+| 403 on rule create | Caller lacks `Foundry User` on project | Run [foundry-roles/scripts/preflight-role.sh](../foundry-roles/scripts/preflight-role.sh) |
 | `evaluator not found` | Custom evaluator referenced before registration | Register via Custom Evaluators API first; see [evaluator-catalog.md](evaluator-catalog.md) |
 | Hourly cap hit | `max_hourly_runs` too low for traffic level | Increase, or accept the cap and trust sampling |
 | Empty reasoning in results | `redact_score_properties: true` | Toggle off if you need explanations |

@@ -20,7 +20,7 @@ Env:
 
 Exit codes:
   0 success / no-op
-  1 caller lacks Azure AI User on project (runbook already emitted)
+  1 caller lacks Foundry User on project (runbook already emitted)
   2 user aborted, or invalid input
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--project-endpoint", required=True)
     p.add_argument("--project-scope",    required=True,
-                   help="Full ARM scope of the Foundry project (used for Azure AI User preflight)")
+                   help="Full ARM scope of the Foundry project (used for Foundry User preflight)")
     p.add_argument("--agent-name",       required=True)
     p.add_argument("--agent-path",       default=None,
                    help="Path to agent folder containing agent-capabilities.yaml")
@@ -57,7 +57,7 @@ def main() -> int:
 
     # 1. Preflight role.
     preflight_role(
-        scope=args.project_scope, role="Azure AI User",
+        scope=args.project_scope, role="Foundry User",
         action="setup-evals", why="Create continuous-eval rule for {}".format(args.agent_name),
     )
 

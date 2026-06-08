@@ -58,12 +58,33 @@ All sections are **optional**. A section appears once a prompt has written to it
 ```json
 "deploy": {
   "version":      "v3",
+  "deploy_mode":  "container",
   "image_tag":    "myacr.azurecr.io/agent:20260514-1030",
   "deployed_at":  "2026-05-14T10:15:00Z",
   "azd_env":      "prod",
   "endpoint":     "https://acct.services.ai.azure.com/api/projects/proj"
 }
 ```
+
+For `deploy_mode: code` (preview source-code path), `image_tag` is omitted and three additional fields are written:
+
+```json
+"deploy": {
+  "version":                "3",
+  "deploy_mode":            "code",
+  "runtime":                "python_3_13",
+  "dependency_resolution":  "remote_build",
+  "zip_sha256":             "a3f2…",
+  "deployed_at":            "2026-11-20T10:15:00Z",
+  "azd_env":                "prod",
+  "endpoint":               "https://acct.services.ai.azure.com/api/projects/proj"
+}
+```
+
+- `deploy_mode` is `container` (default; back-compat) or `code`.
+- `zip_sha256` is the hex-encoded SHA-256 of the uploaded zip. Written by `/verify-agent` from the `x-ms-code-zip-sha256` response header on `code:download`. `/audit-drift` compares this against the local zip's SHA-256.
+- `runtime` mirrors `agent-capabilities.yaml → code.runtime` so drift tools don't need a second read.
+- `dependency_resolution` mirrors `agent-capabilities.yaml → code.dependency_resolution`.
 
 ### `preflight` — written by `/prepare-deploy` Step 2.5
 
@@ -287,3 +308,4 @@ When `schema_version` increments:
 - **v1** (2026-05-14, package 0.11.0): initial schema with `identities`, `deploy`, `preflight`, `network`, `rbac`, `evals`, `verify`, `drift`.
 - **v1.1** (2026-06-18, package 0.20.0): additive `publish` section (TD-2). No breaking changes; consumers that don't read `publish` are unaffected.
 - **v1.2** (2026-06-19, package 0.22.0): additive `publish.inbound_chain` block (TD-23). Written by `foundry-teams-workiq/scripts/probe-inbound-chain.sh --stamp` once TLS + missing-auth-401 + invalid-JWT-401 probes all pass against the customer reverse proxy fronting the private Foundry agent. No `schema_version` bump (additive only).
+- **v1.3** (2026-11-XX, package 0.25.0): additive `deploy.deploy_mode` (`container` | `code`); for `deploy_mode: code`, additive `deploy.zip_sha256`, `deploy.runtime`, `deploy.dependency_resolution` (TD-31). Written by `/verify-agent` Step 0 after `azd ai agent show`. No `schema_version` bump (additive only).

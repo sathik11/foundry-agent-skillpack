@@ -57,7 +57,9 @@ This package's prompts MUST NOT run `az acr build` or POST to `/agents/{name}/ve
 
 ## Bicep
 
-Do NOT hand-author the Bicep templates under `./infra/`. The `azd ai agent` extension scaffolds them on first `azd init`/`azd up`. APM's role is limited to validating the parameters: `ENABLE_HOSTED_AGENTS=true`, `ENABLE_CAPABILITY_HOST=false` (must be false in refreshed preview), `ENABLE_MONITORING=true`.
+Do NOT hand-author the Bicep templates under `./infra/`. The `azd ai agent` extension scaffolds them on first `azd init`/`azd up`. APM's role is limited to validating the parameters: `ENABLE_HOSTED_AGENTS=true`, `ENABLE_CAPABILITY_HOST=false`, `ENABLE_MONITORING=true`.
+
+> **About `ENABLE_CAPABILITY_HOST=false`.** This is a scaffold-time default for the `azd ai agent` extension only — it tells azd *not* to attempt to provision a capabilityHost during `azd up`, because azd does not provision the prerequisite Cosmos DB / Azure AI Search / Storage resources or the project connections that bind them. It is **not** a platform-wide statement. Capability hosts are GA at api-version `2026-03-01` and fully supported at runtime. For the bring-your-own (BYO) capability-host path, run `/add-capability-host` after `azd up` — see [`foundry-deploy/capability-host-bootstrap.md`](../skills/foundry-deploy/capability-host-bootstrap.md).
 
 ## Error Handling
 

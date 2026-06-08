@@ -30,7 +30,7 @@ ROLES_DIR="$SCRIPT_DIR/../../foundry-roles/scripts"
 # Per-kind required roles. Caller-side and agent-side.
 case "$KIND" in
   foundry_iq)
-    CALLER_ROLES=("Search Service Contributor" "Azure AI Project Manager")
+    CALLER_ROLES=("Search Service Contributor" "Foundry Project Manager")
     # Project MI — but verify-script uses agent_principal_id. Foundry IQ uses
     # Project MI for runtime, NOT the per-agent SP. Caller needs to verify the
     # Project MI separately via configure-rbac. Here we only verify caller.
@@ -58,7 +58,7 @@ case "$KIND" in
     AGENT_NOTE="Fabric workspace role assignment for the per-agent SP is print-only (TD-1). See foundry-fabric/SKILL.md."
     ;;
   file_search_basic)
-    CALLER_ROLES=("Azure AI User")
+    CALLER_ROLES=("Foundry User")
     AGENT_ROLES=()
     AGENT_NOTE="Microsoft-managed; no per-agent SP grants needed."
     ;;

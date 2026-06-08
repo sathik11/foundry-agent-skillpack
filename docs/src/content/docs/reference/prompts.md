@@ -1,12 +1,14 @@
 ---
 title: Reference — Prompts
-description: All 9 slash commands the skillpack ships, with inputs and step lists.
+description: All 11 slash commands the skillpack ships, with inputs and step lists.
 ---
 
-The skillpack ships **9 slash commands** under `.github/prompts/` (or your client's equivalent target). Six form the linear lifecycle; three are operational.
+The skillpack ships **11 slash commands** under `.github/prompts/` (or your client's equivalent target). Six form the linear lifecycle; five are operational / assessment / remediation.
 
 | Prompt | Purpose | Lifecycle stage |
 | --- | --- | --- |
+| [`/assess-project`](#assess-project) | Read-only audit of full Foundry project topology — emits verdict report + JSON + capabilities stub | Pre-development |
+| [`/add-capability-host`](#add-capability-host) | Bootstrap or repair project / account capability hosts (BYO thread + vector + storage) | Remediation |
 | [`/plan-agent`](#plan-agent) | Interview + scaffold a new agent OR onboard existing code | Pre-deploy |
 | [`/prepare-deploy`](#prepare-deploy) | Per-capability gate dispatch + initialize `agent-status.json` | Pre-deploy |
 | [`/configure-rbac`](#configure-rbac) | Identity discovery + Phase 1/2/3 RBAC grants (+ `post_publish` re-fan) | Post-deploy |
@@ -54,7 +56,7 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 **Skills referenced:** `foundry-deploy` · `foundry-identity` · `foundry-roles` · `foundry-knowledge` · `foundry-fabric` · `foundry-guardrails` · `foundry-purview` · `foundry-teams-workiq` · `foundry-prod-readiness` · `foundry-failure-modes`.
 
 **Steps:**
-0. **Caller-role + target preflight (FAIL-FAST).** Reads `operator_mode` + `target:` from `agent-capabilities.yaml`; exports `OPERATOR_MODE` for downstream scripts. Only re-elicits on missing fields (runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) if needed). Batch role check via [`preflight-roles.sh prepare-deploy`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for `Contributor` on RG + `Azure AI Developer` on project.
+0. **Caller-role + target preflight (FAIL-FAST).** Reads `operator_mode` + `target:` from `agent-capabilities.yaml`; exports `OPERATOR_MODE` for downstream scripts. Only re-elicits on missing fields (runs [`discover-target.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-target.sh) if needed). Batch role check via [`preflight-roles.sh prepare-deploy`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-roles.sh) for `Contributor` on RG + `Foundry Project Manager` on project.
 1. Detect agent kind (hosted vs prompt).
 2. Foundry resource validation (re-uses Step 0 target; only re-prompts for ACR on Track H).
    - **Step 2.4** — Model deployment validation. If `MODEL_DEPLOYMENT_NAME` already populated by `discover-target.sh` or `/plan-agent` Step 0b, validates it exists; 3-way fork only on 404 (pick existing / deploy-with-consent / print runbook).
@@ -132,7 +134,7 @@ The skillpack ships **9 slash commands** under `.github/prompts/` (or your clien
 **Skills referenced:** `foundry-evals` · `foundry-observability` · `foundry-guardrails` · `foundry-roles`.
 
 **Steps:**
-0. Role preflight (`Azure AI User` on project).
+0. Role preflight (`Foundry User` on project).
 1. Read manifest.
 2. Continuous eval — `ensure_continuous_eval.py` (always).
 3. Scheduled eval — `ensure_scheduled_eval.py` (preview; opt-in).
@@ -193,6 +195,67 @@ Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copil
 
 **Full flow doc:** [foundry-teams-workiq/publish-flow.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-teams-workiq/publish-flow.md).
 
+## /assess-project
+
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `subscription_id` | ✓ | the subscription that owns the Foundry account |
+| `resource_group` | ✓ | RG name |
+| `account_name` | – | auto-detected if there is exactly one Foundry-grade account in the RG |
+| `project_name` | – | defaults to the first project on the account |
+| `out_dir` | – | defaults to `./assessment` (must be writable; safe to commit or `.gitignore`) |
+| `emit_stub` | – | default `true` — also writes `agent-capabilities.draft.yaml` next to the report |
+
+**Skills referenced:** `foundry-deploy` (project-topology.md + discover-project-topology.sh + discover-project-topology.py).
+
+Read-only audit of a Foundry project's full shape before development starts. Emits three artifacts: `project-topology.md` (verdict per category with ✅/⚠/❌ + Top 3 things to look at + per-category detail), `project-topology.json` (machine-readable for CI gates / `jq` / `/prepare-deploy` cross-check), and `agent-capabilities.draft.yaml` (pre-filled stub with discovered target / network / knowledge sources + `# TODO` markers — non-mutating; manual `mv` to promote).
+
+Single-call wrapper: [`assess-project.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/assess-project.sh) chains preflight + discover + format in one invocation (replaces the three-tool-call shape from v0.25.x).
+
+See [Concepts → Project assessment](../concepts/project-assessment/) for the six recurring scenarios this answers, the Foundry Toolkit boundary matrix, and where this does NOT help. Exit codes: `0` ok / `2` not-Foundry-grade / `3` no-account / `4` ambiguous-account-or-project (picklist on stdout).
+
+When the **Capability hosts** row is ⚠, Step 5 offers handoff to [`/add-capability-host`](#add-capability-host) for real remediation (not verdict softening).
+
+## /add-capability-host
+
+**Parameters:**
+
+| Input | Required | Notes |
+| --- | --- | --- |
+| `subscription_id` | ✓ | the subscription that owns the Foundry account |
+| `resource_group` | ✓ | RG name |
+| `account_name` | ✓ | Foundry account FQDN-shortname |
+| `project_name` | ✓ | project on the account |
+| `thread_connection` | – | Cosmos DB connection name (picklist if ambiguous, auto-pick if single candidate) |
+| `vector_connection` | – | AI Search connection name (same) |
+| `storage_connection` | – | Storage account connection name (same) |
+| `aiservices_connection` | – | optional — AI Services connection name |
+| `scope` | – | `account` / `project` / `both` (default `both`) |
+| `force_recreate` | – | `true|false` (default `false`). Required when partial-binding host already exists (no UPDATE — only DELETE + CREATE). |
+| `assessment_dir` | – | defaults to `./assessment` — reads `/assess-project`'s cached `project-topology.json` to skip re-discovery |
+
+**Skills referenced:** `foundry-deploy` (capability-host-bootstrap.md + add-capability-host.sh + discover-project-topology.sh) · `foundry-roles` (Contributor on Foundry account scope).
+
+Bootstrap or repair a Foundry project's capability host bindings — the BYO path for thread storage (Cosmos DB), vector store (AI Search), and blob storage that powers `Agents` workloads. Resolves the gap that azd-extension scaffold leaves open (`ENABLE_CAPABILITY_HOST=false` is the scaffold default because azd doesn't provision the prerequisite Cosmos / AI Search / Storage — but the **platform** supports it at api-version `2026-03-01`).
+
+**Safety contract — dry-run first:**
+
+1. **Step 1** — Caller-role preflight (Contributor on Foundry account scope; `Cognitive Services Contributor` is **not** sufficient).
+2. **Step 2** — Cached topology pickup. Reads `./assessment/project-topology.json` if present; otherwise suggests running `/assess-project` first.
+3. **Step 3** — Connection selection. If any of `thread/vector/storage` is unspecified AND there is exactly one Foundry connection of that category → auto-pick. Otherwise picklist with explicit user confirmation.
+4. **Step 4** — **Dry-run ALWAYS first.** Renders planned PUT bodies (account scope first, then project scope) including the required `metadata.ResourceId` value resolved from connection properties.
+5. **Step 5** — Explicit `yes` consent. Additional `yes confirm delete` required if `--force-recreate` is in the plan (DELETE is irreversible — no UPDATE path).
+6. **Step 6** — Apply with `--no-dry-run`. Script polls `provisioningState` to `Succeeded` (3-minute timeout).
+7. **Step 7** — Re-run `/assess-project` to verify ⚠ → ✅.
+
+**Forbidden shortcuts:** never skip dry-run · never silently auto-pick when ambiguous · never pass `--force-recreate` without explicit user consent · never assume capability hosts support UPDATE (they don't — only DELETE + CREATE) · never proceed when a chosen connection has empty `metadata.ResourceId` (runtime will silently fall back to default storage).
+
+Reference doc: [capability-host-bootstrap.md](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-deploy/capability-host-bootstrap.md) covers REST shape at both scopes, naming convention, two-scope ordering rule, required connections with `metadata.ResourceId`, idempotency contract, RBAC matrix, and common failure modes.
+
+Exit codes: `0` ok / `2` ambiguous-connection (picklist on stdout) / `3` empty-ResourceId / `4` already-exists-no-force / `5` dry-run-complete.
+
 ## /troubleshoot
 
 **Parameters:**
@@ -204,7 +267,7 @@ Orchestrates publishing a deployed Foundry agent to Microsoft Teams / M365 Copil
 
 **Skills referenced:** `foundry-failure-modes`.
 
-**Routes** to the matching entry in [foundry-failure-modes](/skills/) and surfaces the one-line fix. Common entry points: `container exits 1`, `403 on first invoke`, `tool spans missing`, `model not found`, `version stuck creating`.
+**Routes** to the matching entry in [foundry-failure-modes](/skills/) and surfaces the one-line fix. Common entry points: `container exits 1`, `403 on first invoke`, `tool spans missing`, `model not found`, `version stuck creating`. If no failure-mode entry matches and the symptom mentions a *missing resource* shape (eval traces missing / capability host / thread store / AI Search not bound), Step 3 Scenario 4 hook re-checks cached `./assessment/project-topology.json` or suggests running `/assess-project` first.
 
 ## /audit-drift
 

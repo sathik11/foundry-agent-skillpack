@@ -9,7 +9,22 @@ Single source of truth. Every script in this package declares which row it needs
 - **Scope** — where the role must be assigned. `account` = Foundry AI Services account, `project` = Foundry project, `resource` = the specific data/tool resource.
 - **Persona hint** — typical owner if the caller doesn't have it. Used by [runbook-emit.sh](scripts/runbook-emit.sh).
 
-> Validity date: 2026-05-14. Re-verify against [Microsoft Learn](https://learn.microsoft.com/azure/foundry/) on a regular cadence — Foundry is preview-adjacent and roles do change.
+> Validity date: 2026-06-08. Re-verify against [Microsoft Learn](https://learn.microsoft.com/azure/foundry/) on a regular cadence — Foundry is preview-adjacent and roles do change.
+
+## Rename rollout note (Microsoft Foundry RBAC, 2026)
+
+Microsoft renamed four built-in Foundry data-plane roles. **Role definition IDs and core permissions are unchanged.** During the rollout you may see either name in the Azure portal or `az role assignment list` output depending on backend caching. Skillpack scripts that grant use the role-definition GUID; skillpack scripts that preflight are alias-aware.
+
+| Old name | New name | Role definition ID |
+|---|---|---|
+| `Azure AI User` | **`Foundry User`** | `53ca6127-db72-4b80-b1b0-d745d6d5456d` |
+| `Azure AI Owner` | **`Foundry Owner`** | `c883944f-8b7b-4483-af10-35834be79c4a` |
+| `Azure AI Account Owner` | **`Foundry Account Owner`** | `e47c6f54-e4a2-4754-9501-8e0985b135e1` |
+| `Azure AI Project Manager` | **`Foundry Project Manager`** | `eadc314b-1a2d-4efa-be10-5d325db5065e` |
+
+Sources: [rbac-foundry](https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry#built-in-roles), [quickstart-create-foundry-resources](https://learn.microsoft.com/azure/foundry/tutorials/quickstart-create-foundry-resources#for-administrators---grant-access). See [TD-30](../../../TECHNICAL_DEBT.md#td-30--foundry-rbac-role-rename--azure-ai-developer-misuse-closed-in-v0240).
+
+> ⚠ **`Azure AI Developer` is NOT a Foundry hosted-agent role.** Per [hosted-agent permissions reference](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions): *"the Azure AI Developer built-in role is insufficient for Hosted agent scenarios. This role is scoped to Azure Machine Learning and Foundry hubs, not to the Foundry project resources used by Hosted agents."* Use `Foundry User` (data-plane minimum) or `Foundry Project Manager` (data-plane + project config writes) instead.
 
 ## Phase 0 — Preflight (Reader floor)
 
@@ -29,8 +44,8 @@ If `Reader` is missing on a resource, the skillpack **does not stop** — it deg
 | `azd up` (create agent version + Entra agent identity) | `Contributor` | Foundry account RG | DevOps |
 | Push image to ACR (BYO build, not ACR Tasks) | `AcrPush` or `Container Registry Repository Writer` | ACR | DevOps |
 | Pull image from ACR (Project MI; auto-assigned by azd) | `AcrPull` or `Container Registry Repository Reader` | ACR | Verify only — azd assigns |
-| Create / edit Foundry connections (MCP, AI Search, etc.) | `Azure AI Project Manager` | project | DevOps |
-| Set environment variables on a version | `Azure AI Developer` | project | DevOps |
+| Create / edit Foundry connections (MCP, AI Search, etc.) | `Foundry Project Manager` | project | DevOps |
+| Set environment variables on a version | `Foundry Project Manager` | project | DevOps |
 | Create model deployment (`POST .../deployments/<name>`) | `Cognitive Services Contributor` | account | DevOps — runbook if caller lacks it (see [model-selection.md](../foundry-deploy/model-selection.md) Step 2.4 fork (b)) |
 
 ## Phase 2 — Per-agent identity grants
@@ -39,8 +54,7 @@ These run **after** `azd up` (the per-agent SP doesn't exist before that). The c
 
 | Grant target → role | Scope | Persona hint |
 |---|---|---|
-| Per-agent SP → `Azure AI User` | account (critical) + project | DevOps |
-| Per-agent SP → `Azure AI Developer` | project | DevOps |
+| Per-agent SP → `Foundry User` | account (critical) + project | DevOps |
 | Per-agent SP → `Cognitive Services OpenAI User` | account | DevOps |
 | Per-agent SP → `Cognitive Services User` | account | DevOps |
 | Per-agent SP → `Cognitive Services User` (when guardrails use CS) | Content Safety resource | DevOps |
@@ -52,10 +66,10 @@ These run **after** `azd up` (the per-agent SP doesn't exist before that). The c
 
 | Action | Required role | Scope | Persona hint |
 |---|---|---|---|
-| Create / update continuous evaluation rule | `Azure AI User` | project | DevOps |
-| Create / update scheduled evaluation (preview) | `Azure AI User` | project | DevOps |
-| Create / schedule cloud red-team (preview) | `Azure AI User` | project | DevOps |
-| Configure Monitor dashboard alerts (preview, portal-only today) | `Azure AI User` + `Monitoring Contributor` | project + App Insights RG | DevOps |
+| Create / update continuous evaluation rule | `Foundry User` | project | DevOps |
+| Create / update scheduled evaluation (preview) | `Foundry User` | project | DevOps |
+| Create / schedule cloud red-team (preview) | `Foundry User` | project | DevOps |
+| Configure Monitor dashboard alerts (preview, portal-only today) | `Foundry User` + `Monitoring Contributor` | project + App Insights RG | DevOps |
 | Read continuous-eval results from App Insights | `Reader` + `Log Analytics Reader` | App Insights + Log Analytics | Caller |
 
 ## Phase 4 — Network isolation (managed VNet / BYO VNet)
@@ -73,7 +87,7 @@ These run **after** `azd up` (the per-agent SP doesn't exist before that). The c
 
 | Action | Required role | Scope | Persona hint |
 |---|---|---|---|
-| Toggle Microsoft Purview integration on Foundry account | `Cognitive Services Security Integration Administrator` or `Azure AI Account Owner` | account | Tenant admin — runbook |
+| Toggle Microsoft Purview integration on Foundry account | `Cognitive Services Security Integration Administrator` or `Foundry Account Owner` | account | Tenant admin — runbook |
 | Create DSPM / DLP policies for AI | `Purview Data Security AI Admin` | tenant | Tenant admin — runbook |
 | Add per-agent identity to Fabric workspace | `Fabric Admin` (workspace) | Fabric workspace | Fabric admin — runbook (TD-1) |
 | Register agent in Agent 365 / Teams | `Teams Administrator` + `M365 Admin` | tenant | M365 admin — runbook |
@@ -86,12 +100,12 @@ For tooling — `preflight-role.sh` accepts an action name as a synonym for the 
 | Action keyword | Resolves to |
 |---|---|
 | `plan-agent` | Phase 0, `Reader` on RG + ability to list a Foundry account in that RG (used by `/plan-agent` Step 0a) |
-| `prepare-deploy` | Phase 1, `Contributor` on account RG + `Azure AI Developer` on project (used by `/prepare-deploy` Step 0) |
+| `prepare-deploy` | Phase 1, `Contributor` on account RG + `Foundry Project Manager` on project (used by `/prepare-deploy` Step 0). `Foundry User` alone is insufficient because `azd up` writes env vars on the agent version — a project-config write that needs Project Manager. |
 | `deploy` | Phase 1, `Contributor` on account RG |
 | `model-deploy` | Phase 1, `Cognitive Services Contributor` on account (gates `/prepare-deploy` Step 2.4 fork (b) — deploy missing model with consent) |
 | `grant-rbac` | Phase 2, `Owner` or `User Access Administrator` on grant target |
-| `setup-evals` | Phase 3, `Azure AI User` on project |
-| `setup-redteam` | Phase 3, `Azure AI User` on project + region check (East US 2 / France Central / Sweden Central / Switzerland West / North Central US) |
+| `setup-evals` | Phase 3, `Foundry User` on project |
+| `setup-redteam` | Phase 3, `Foundry User` on project + region check (East US 2 / France Central / Sweden Central / Switzerland West / North Central US) |
 | `network-preflight` | Phase 0, `Reader` on each declared resource |
 | `audit-drift` | Phase 0, `Reader` on the project + each declared resource (read-only reconciler; never mutates) |
 | `approve-pe` | Phase 4, `Azure AI Enterprise Network Connection Approver` on target |
@@ -102,4 +116,4 @@ For tooling — `preflight-role.sh` accepts an action name as a synonym for the 
 
 - **Why not collapse to one mega-role per persona?** Tempting but wrong. `Owner` on a project doesn't grant tenant-scoped Purview operations or Fabric workspace admin. Persona is a hint; scope is the truth.
 - **Why not fold this into `foundry-identity`?** `foundry-identity` covers the *agent's* identities (project MI + per-agent SP). This skill covers the *caller's* identity. Different actor, same conceptual surface — but mixing them led to confusion in earlier drafts.
-- **Re-evaluate cadence.** Foundry GA waves and preview promotions change role names (e.g. `Azure AI User` was once `AzureML Data Scientist`). When the daily docs scan flags a role rename, update this file first, then propagate.
+- **Re-evaluate cadence.** Foundry GA waves and preview promotions change role names (e.g. `Foundry User` was once `AzureML Data Scientist`, then `Azure AI User`, now `Foundry User`). When the daily docs scan flags a role rename, update the rename rollout table above first, then propagate.

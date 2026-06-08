@@ -20,7 +20,7 @@ The five phases:
 | 0 | Read-only preflight | Caller (Reader floor) |
 | 1 | Build & deploy (`azd up`) | DevOps (`Contributor` on RG) |
 | 2 | Per-agent identity grants | DevOps (`Owner` / `User Access Administrator`) |
-| 3 | Eval / monitoring / red-team | DevOps (`Azure AI User` on project) |
+| 3 | Eval / monitoring / red-team | DevOps (`Foundry User` on project) |
 | 4 | Network isolation operations | Network Admin |
 | 5 | Tenant-scoped (Purview, Fabric, Teams, Entra) | Tenant / Compliance / Fabric / M365 admin |
 

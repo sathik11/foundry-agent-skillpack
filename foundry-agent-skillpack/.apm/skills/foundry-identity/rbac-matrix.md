@@ -12,11 +12,12 @@ Apply in three phases. Phase 1 is one-time per project. Phase 2 is per agent. Ph
 
 ## Phase 2 — Runtime (per agent)
 
+> Foundry RBAC role rename (TD-30): `Azure AI {User,Owner,Account Owner,Project Manager}` were renamed to `Foundry {…}` (role IDs unchanged). `Azure AI Developer` is **not** a hosted-agent role — per Microsoft Learn it is "insufficient for Hosted agent scenarios" — and has been removed from this matrix. See [foundry-roles/role-matrix.md](../foundry-roles/role-matrix.md#rename-rollout-note-microsoft-foundry-rbac-2026).
+
 | Identity | Role | Scope |
 |----------|------|-------|
-| Per-agent | `Azure AI User` | **Account** (critical) |
-| Per-agent | `Azure AI User` | Project |
-| Per-agent | `Azure AI Developer` | Project |
+| Per-agent | `Foundry User` | **Account** (critical) |
+| Per-agent | `Foundry User` | Project |
 | Per-agent | `Cognitive Services OpenAI User` | Account |
 | Per-agent | `Cognitive Services User` | Account |
 
