@@ -158,6 +158,8 @@ azd up
 
 `azd ai agent init --deploy-mode code` was added alongside the preview. Earlier `azd ai agent` extension versions (< the version that introduced `--deploy-mode`) will silently scaffold the container path — `/prepare-deploy` Step 0 already enforces a minimum extension version; bump that floor if code-deploy is required for this project.
 
+> ⚠️ **Even on the current (`>= 0.1.27-preview`) extension, the scaffolder will still silently emit the container path** in certain corner cases (e.g. when the agent folder already contains a stray `Dockerfile` from a previous container run, or when `--deploy-mode code` is left off the command line and the extension defaults to container). `azure.yaml` ends up with `services.<svc>.language: docker` and no Dockerfile, and `azd deploy` later fails with "No such file or directory: Dockerfile." See **foundry-failure-modes** § F-30. The `prepare-deploy.sh` wrapper's `safe-azd-init.sh` (≥ v0.27) refuses to run when `deploy_mode: code` is declared but a Dockerfile is present, and `validate-azure-yaml.sh` cross-checks `services.<svc>.language` against the manifest after init — these two gates close the gap.
+
 ## Packaging
 
 The zip MUST be **flat at the root** — no top-level wrapper folder. The single most common failure mode is `agent-code.zip → my-agent/main.py` instead of `agent-code.zip → main.py`. The service does not unwrap.

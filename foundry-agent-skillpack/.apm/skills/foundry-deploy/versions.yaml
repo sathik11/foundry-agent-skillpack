@@ -1,0 +1,34 @@
+# Tooling version floors enforced by foundry-deploy/scripts/preflight-azd.sh.
+#
+# Why this file exists (FB-8): the azd extension cannot be locked — when the
+# preview surface for hosted agents moves, we must bump the floor here in
+# lockstep. Keeping the floors in a reviewable YAML (not buried in bash)
+# means every bump shows up in PR diff.
+#
+# Source-of-truth precedence:
+#   1. This file (versions.yaml)
+#   2. Defaults baked into preflight-azd.sh (kept identical at release time —
+#      protects consumers who installed an older skillpack but still expect
+#      the script to run when this file is absent).
+#
+# Bump procedure on release:
+#   - Edit floor here.
+#   - Mirror the same value into preflight-azd.sh DEFAULT_* constants.
+#   - Note in the apm.yml changelog comment.
+#
+# Last reviewed: 2026-06-11 (skillpack v0.27.0).
+
+# azd CLI itself
+azd: "1.10.0"
+
+# azure.ai.agents extension — first build on the refreshed hosted-agents
+# backend that ships --deploy-mode code support.
+az_agents_ext: "0.1.27-preview"
+
+# az CLI
+az: "2.65.0"
+
+# Caller-side SDK pin for prompts that read project topology (read-only).
+# code-deploy helpers need a higher floor — see code-deploy.md.
+azure_ai_projects: ">=2.0.0,<3"
+azure_ai_projects_code_deploy: ">=2.2.0,<3"

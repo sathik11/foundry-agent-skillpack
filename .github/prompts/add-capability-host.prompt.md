@@ -14,6 +14,7 @@ input:
   - storage_resource_id: "ARM ID of an EXISTING Microsoft.Storage/storageAccounts to wire as a new storage connection. Optional — only used when no Storage connection exists yet."
   - scope: "account|project|both. Default 'both'. Use 'project' when the account-level capHost already exists."
   - force_recreate: "true|false — if a same-name capabilityHost already exists, DELETE and recreate. Default false. Requires explicit user consent in Step 5."
+  - grant_rbac: "true|false — grant the project's SystemAssigned MI the 6 control-plane + data-plane roles capabilityHost provisioning REQUIRES on the bound Cosmos / AI Search / Storage. Default false (we don't auto-grant), but the prompt STRONGLY recommends setting true unless the user explicitly confirms RBAC is already in place. Empirically: without these grants the project capabilityHost reaches provisioningState=Failed within ~3min. See capability-host-bootstrap.md → 'Required project-MI data-plane RBAC'."
   - assessment_dir: "Where /assess-project wrote project-topology.json. Default './assessment'."
 ---
 
@@ -110,6 +111,28 @@ If exactly one connection exists per category, surface it and ask the user to co
 
 If the user picks option 2, capture the ARM ID into the matching input (`thread_resource_id` / `vector_resource_id` / `storage_resource_id`) and pass it to the script in Step 3 via `--thread-resource-id` / `--vector-resource-id` / `--storage-resource-id`. The script validates the provider segment and aborts if it doesn't match the expected role.
 
+## Step 2.5 — Confirm RBAC posture (load-bearing)
+
+The project capabilityHost provisioner uses the project's **SystemAssigned managed identity** to bootstrap containers in the bound Cosmos account, indexes in the bound Search service, and blobs in the bound Storage account. If the project MI lacks those data-plane roles, the platform retries silently for ~3 minutes and then fails with `provisioningState=Failed` — and once an agent is linked to that failed host, the host can't be DELETEd, so recovery requires deleting the project (verified empirically in test).
+
+The 6 roles (see [`capability-host-bootstrap.md` → Required project-MI data-plane RBAC](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/capability-host-bootstrap.md) for canonical CLI):
+
+| Backing | Control plane | Data plane |
+|---|---|---|
+| Cosmos  | Cosmos DB Operator | Cosmos DB Built-in Data Contributor (granted via `az cosmosdb sql role assignment create`, NOT regular RBAC) |
+| Search  | Search Service Contributor | Search Index Data Contributor |
+| Storage | Storage Account Contributor | Storage Blob Data Owner |
+
+Ask the user:
+
+> Has the project's managed identity already been granted the 6 data-plane roles on the backing Cosmos / AI Search / Storage resources?
+>
+> - Type `grant` (recommended) to have me grant them as part of this run (idempotent — safe to re-run).
+> - Type `already granted` if you've verified all 6 are in place (e.g. via Bicep/Terraform).
+> - Type `skip` only if you understand the project capHost may fail to provision (e.g. you are testing the failure mode).
+
+Set `grant_rbac=true` for `grant`, leave `grant_rbac=false` for `already granted`, and STOP if the user types `skip` without acknowledging the consequence in the same turn.
+
 ## Step 3 — Dry-run preview (always first, no exceptions)
 
 ```bash
@@ -127,6 +150,7 @@ If the user picks option 2, capture the ARM ID into the matching input (`thread_
   $( [[ -n "${input:vector_resource_id:-}" ]] && echo "--vector-resource-id ${input:vector_resource_id}" ) \
   $( [[ -n "${input:storage_resource_id:-}" ]] && echo "--storage-resource-id ${input:storage_resource_id}" ) \
   $( [[ "${input:force_recreate:-false}" == "true" ]] && echo "--force-recreate" ) \
+  $( [[ "${input:grant_rbac:-false}" == "true" ]] && echo "--grant-rbac" ) \
   2>&1 | tee /tmp/add-capability-host.dryrun.log
 EXIT=$?
 echo "[i] dry-run exit code: $EXIT"
@@ -146,6 +170,7 @@ The script will:
 | `2` | Ambiguous connection — multiple of one category but no `--<role>-conn` given | Surface the `PICKLIST_<ROLE>_<n>=` keys, ask the user to pick, re-run Step 3. |
 | `3` | Chosen EXISTING connection has empty `metadata.ResourceId` | STOP. Tell the user to recreate the connection via the portal (the portal flow always populates `ResourceId`). See [`capability-host-bootstrap.md` → Required connections](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/capability-host-bootstrap.md). |
 | `4` | Same-name capabilityHost already exists | Ask the user whether to re-run with `force_recreate=true` (destructive — see Step 5). |
+| `6` | RBAC grant failed (caller lacks `Microsoft.Authorization/roleAssignments/write` on the backing resources, or Cosmos data-plane grant failed) | STOP. Show the user which role/scope failed. Either re-run after the caller is granted Owner / User Access Administrator on the failing scope, OR drop `--grant-rbac` and have a privileged user grant the 6 roles manually (see `capability-host-bootstrap.md`). |
 | `0` | Should not happen in dry-run | Surface the log and STOP. |
 | other | Script-internal error (e.g. ARM provider mismatch) | Tail `/tmp/add-capability-host.dryrun.log` and surface. |
 
@@ -164,6 +189,10 @@ Render to the user:
 >   - vectorStore → `<conn-name>` (AI Search)
 >   - storage → `<conn-name>` (Storage)
 >   - aiServices → `<conn-name>` (optional)
+> - RBAC grants (only if `grant_rbac=true`): **6** roles to project MI on the backing resources
+>   - Cosmos DB Operator + Cosmos DB Built-in Data Contributor → `<cosmos-arm-id>`
+>   - Search Service Contributor + Search Index Data Contributor → `<search-arm-id>`
+>   - Storage Account Contributor + Storage Blob Data Owner → `<storage-arm-id>`
 >
 > The PUT bodies are above. Re-applying is destructive — there is no in-place UPDATE on capabilityHosts.
 
@@ -196,6 +225,7 @@ Only the literal `yes confirm delete` (case-insensitive) proceeds with deletion 
   $( [[ -n "${input:vector_resource_id:-}" ]] && echo "--vector-resource-id ${input:vector_resource_id}" ) \
   $( [[ -n "${input:storage_resource_id:-}" ]] && echo "--storage-resource-id ${input:storage_resource_id}" ) \
   $( [[ "${input:force_recreate:-false}" == "true" ]] && echo "--force-recreate" ) \
+  $( [[ "${input:grant_rbac:-false}" == "true" ]] && echo "--grant-rbac" ) \
   --no-dry-run \
   2>&1 | tee /tmp/add-capability-host.apply.log
 EXIT=$?
@@ -235,3 +265,4 @@ If it's still ⚠ after a `0` exit on Step 6, the script's verification likely c
 - ❌ Do NOT skip the post-PUT GET verification on inline-created connections — Step 7a re-reads each connection and aborts before the capHost PUT if `metadata.ResourceId` came back empty.
 - ❌ Do NOT assume capabilityHosts support UPDATE. The API only supports PUT (which 409s on collision) and DELETE. "Change a binding" = delete + recreate.
 - ❌ Do NOT batch multiple projects in one invocation. Run the prompt once per project so each consent gate is explicit.
+- ❌ Do NOT issue the capability-host PUT without verifying the 6 project-MI data-plane RBAC grants are in place. Either set `grant_rbac=true` (recommended; the script grants idempotently and sleeps 30s for propagation before the PUT) OR have the user confirm in chat that all 6 roles from [`capability-host-bootstrap.md` → Required project-MI data-plane RBAC](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/capability-host-bootstrap.md) are already granted. Empirically: skipping this step makes the project capHost reach `provisioningState=Failed` within ~3min, and the only recovery is DELETE+PUT (which is blocked once an agent is linked).

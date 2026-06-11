@@ -61,7 +61,10 @@ targets:
 EOF
 
 apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
+apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook
 ```
+
+> Install **both**: the skillpack ships the skills + prompts, the playbook ships the recipes + fixtures. They are sibling packages in the same monorepo.
 
 ## 3. Where files land
 

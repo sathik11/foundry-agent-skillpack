@@ -3,7 +3,8 @@ name: APM install smoke test
 on:
   pull_request:
     paths:
-      - 'foundry-agent-engineering/**'
+      - 'foundry-agent-skillpack/**'
+      - 'foundry-agent-playbook/**'
       - '.github/workflows/apm-install-test.yml'
   push:
     branches: [main]
@@ -16,15 +17,29 @@ jobs:
       - name: Install APM
         run: curl -sSL https://aka.ms/apm-unix | sh
       - name: Resolve package as a consumer would
+        # v0.27.0: repo was renamed (Foundry-Hosted-Agent-Skill → foundry-agent-skillpack)
+        # and package was renamed (foundry-agent-engineering → foundry-agent-skillpack).
+        # APM also no longer auto-defaults to `copilot`; targets must be explicit.
         run: |
           mkdir -p /tmp/consumer && cd /tmp/consumer
           cat > apm.yml <<'EOF'
           name: install-smoke-test
           version: 0.0.1
+          targets:
+            - copilot
+            - agent-skills
           dependencies:
             apm:
-              - sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-engineering
+              - sathik11/foundry-agent-skillpack/foundry-agent-skillpack
+              - sathik11/foundry-agent-skillpack/foundry-agent-playbook
           EOF
           apm install
-          test -d .github/skills -o -d .claude/skills -o -d .agents/skills
+          # Verify the install actually produced the expected harness output.
+          # foundry-agent-skillpack ships prompts (.github/prompts) + skills (.agents/skills).
+          # foundry-agent-playbook ships recipes + samples under .agents/skills.
+          test -d .github/prompts || { echo "::error::no .github/prompts/ after install"; exit 1; }
+          test -d .agents/skills  || { echo "::error::no .agents/skills/ after install";  exit 1; }
+          # Confirm both packages landed.
+          test -d .agents/skills/foundry-deploy        || { echo "::error::skillpack skills missing"; exit 1; }
+          test -d .agents/skills/foundry-agent-playbook || echo "::warning::playbook skill dir missing — non-fatal"
           apm audit || true

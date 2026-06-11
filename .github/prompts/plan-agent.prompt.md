@@ -128,7 +128,13 @@ Ask the user **once**:
    ```
 4. **Add `tools.py`** — one `@tool` stub per capability identified in the description.
 5. **Write INSTRUCTIONS** based on "${input:description}": role, tool-use rules, output format.
-6. If guardrails declared (Step 4): also `cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"` and uncomment the middleware lines in `main.py`.
+6. **Guardrails vendoring (CONDITIONAL — FB-7).** This step runs **only** if Step 4's capability interview declared `guardrails.layers: [middleware]`. If guardrails were not declared, **skip this step entirely** — do not copy the file, do not uncomment the middleware lines, do not add the import.
+
+   When guardrails ARE declared, vendor a per-agent copy:
+   ```bash
+   cp .agents/skills/foundry-guardrails/scripts/guardrails.py "$AGENT/guardrails.py"
+   ```
+   Then uncomment the middleware wiring in `main.py`. **Why a per-agent copy instead of a shared import?** Each agent typically tunes its own constructor args (blocked-token sets, severity floors, on-block messages). Vendoring keeps the tuning version-controlled with the agent and avoids hidden coupling between agents that share a parent folder. See [foundry-guardrails § Vendored middleware](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-guardrails/SKILL.md).
 
 ## Track C — Prompt agent (no container)
 

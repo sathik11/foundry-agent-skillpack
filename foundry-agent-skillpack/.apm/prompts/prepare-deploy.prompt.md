@@ -33,22 +33,14 @@ Do this **before** loading any project files — it is cheap and prevents wastin
        <target.subscription> <target.resource_group> <target.foundry_account> <target.project>
    ```
    If exit non-zero, print the emitted runbook(s) and STOP. The `PREFLIGHT_MISSING` key lists exactly which roles are missing. Required minimums: `Contributor` on the RG (for `azd up`) and `Foundry Project Manager` on the project (for hosted-agent create + version env-var writes; previously `Azure AI Developer` was listed here, which Microsoft Learn explicitly calls insufficient for hosted agents — see TD-30).
-3. **azd + `azure.ai.agents` extension preflight.** Verify `azd` is on PATH and the agent extension is at least `0.1.27-preview`. Earlier versions (e.g. `0.1.25-preview`) use the **deprecated Azure Container Apps backend** and will fail later at Step 6's `azd up` against the current hosted-agents control plane.
+3. **azd + `azure.ai.agents` extension preflight (one call).** Run the bundled preflight script. It checks `azd`, `azure.ai.agents` extension, `az` CLI, login state, AND (for `deploy_mode: code`) the `--deploy-mode code` flag support — emitting structured KV and a single `RECOVERY=...` line on failure. Floors are read from `.agents/skills/foundry-deploy/versions.yaml`. **Do not** shell out to `azd version` / `azd ext list` / `azd ai agent init --help` directly — the script handles all of that with one approval.
+
    ```bash
-   # azd CLI must be installed.
-   azd version >/dev/null 2>&1 || { echo "ERROR: azd CLI not on PATH — install: https://aka.ms/install-azd"; exit 1; }
-
-   # azure.ai.agents extension must be installed.
-   ext_line=$(azd ext list 2>/dev/null | grep -E '^[[:space:]]*azure\.ai\.agents\b') \
-     || { echo "ERROR: azd ai agent extension not installed — run: azd ext install azure.ai.agents"; exit 1; }
-
-   # Minimum version 0.1.27 (the first build on the refreshed hosted-agents backend).
-   ext_ver=$(echo "$ext_line" | awk '{print $2}')
-   required="0.1.27"
-   [ "$(printf '%s\n%s\n' "$required" "$ext_ver" | sort -V | head -1)" = "$required" ] \
-     || { echo "ERROR: azd ai agent $ext_ver is below required ${required}-preview — run: azd ext upgrade azure.ai.agents"; exit 1; }
+   DEPLOY_MODE=$(yq -r '.deploy_mode // "container"' ${input:agent_path}/agent-capabilities.yaml)
+   .agents/skills/foundry-deploy/scripts/preflight-azd.sh --deploy-mode "$DEPLOY_MODE"
    ```
-   On failure, print the recovery command shown in the error and STOP — do not fall through to Step 1.
+
+   Exit `0` = pass. Exit `2` = parse the emitted `FAIL_REASON=...` + `RECOVERY=...`, print the recovery command verbatim, and STOP. Do not fall through to Step 1.
 
 ✅ **Checkpoint.** `target.*` is populated, the caller has the Phase 1 role minimums, and `azd` + `azure.ai.agents` ≥ `0.1.27-preview` are installed.
 
@@ -253,16 +245,16 @@ Capability gates:
 
 If any ❌, STOP. If only ⚠, ask the user to confirm continuing.
 
-**Stamp preflight + network into `agent-status.json`** (use the helper, never `jq`):
+**Stamp preflight + network into `agent-status.json`.** Build ONE composite JSON object for the `preflight` section and ONE for `network`, then issue two `update` calls (not N) — `agent_status.py` is the only writer. Use `--section preflight` / `--section network` with full payloads:
 
 ```bash
-# Per-capability preflight verdicts (build the JSON from the checklist above)
+# One composite preflight stamp (capabilities + per-source verdicts + checked_at).
 python .agents/skills/foundry-deploy/scripts/agent_status.py update \
   --agent-path ${input:agent_path} \
   --section preflight \
-  --json '{"capabilities": {"toolbox": {"verdict":"pass","detail":"..."}, ...}, "checked_at":"<now>"}'
+  --json '{"capabilities":{"toolbox":{"verdict":"pass"},"knowledge":{"verdict":"pass"},"guardrails":{"verdict":"pass"}},"topology_crosscheck":"matched","checked_at":"<now>"}'
 
-# Network detection results (from the four scripts; see network block schema in agent-status-schema.md)
+# One composite network stamp (matches schema in agent-status-schema.md).
 python .agents/skills/foundry-deploy/scripts/agent_status.py update \
   --agent-path ${input:agent_path} \
   --section network \
@@ -273,38 +265,40 @@ python .agents/skills/foundry-deploy/scripts/agent_status.py drift \
   --agent-path ${input:agent_path}
 ```
 
+> **Why one call per section?** Each `agent_status.py update` invocation is one approval. Build the full JSON in your head from the checklist results, then issue one `update --section ...` per section. Do **not** loop calling `update --path foo.bar` for each field — that's the v0.26 anti-pattern this version replaces.
+
 ---
 
-## Step 3 — `azure.yaml` (azd ai agent extension)
+## Step 3 — Prepare for `azd up` (one approval)
 
-Look for `azure.yaml` at the **repo root** (not inside the agent folder).
+This step **fans out** the v0.26 plumbing (sync azd env vars, run `azd ai agent init`, validate AZURE_LOCATION, validate `azure.yaml`/Dockerfile match) into a single call to `prepare-deploy.sh`. The wrapper:
 
-### If missing
+1. Loads cached topology (if `./assessment/project-topology.json` exists)
+2. Re-runs `preflight-azd.sh` to make sure tooling is still floor-compliant
+3. **Syncs azd env vars from the manifest** — `AZURE_LOCATION`, `MODEL_DEPLOYMENT_NAME`, `USE_EXISTING_AI_PROJECT=true`, ACR (container mode only) — so `azd up` doesn't ask interactive questions
+4. Calls `safe-azd-init.sh` with manifest-derived flags (`--deploy-mode`, `--runtime`, `--entry-point`, `--dep-resolution`, `--location`, `--model-deployment`, `--protocol`)
+5. **Validates AZURE_LOCATION matches `target.location`** (FB-20: cross-region `azd up` → `InvalidResourceLocation`)
+6. **Validates `azure.yaml` `services.<svc>.language` matches `deploy_mode`** (FB-21: extension silently scaffolds Dockerfile path even when `deploy_mode: code` is declared in the manifest)
+7. Stamps everything into `agent-status.json` `preflight` section in one atomic write
 
-Use the guarded init script:
 ```bash
-.agents/skills/foundry-deploy/scripts/safe-azd-init.sh ${input:agent_path} \
-  --manifest ${input:agent_path}/agent.yaml \
-  --src ${input:agent_path} \
-  --model-deployment <MODEL_DEPLOYMENT_NAME> \
-  --protocol responses
+.agents/skills/foundry-deploy/scripts/prepare-deploy.sh ${input:agent_path}
 ```
 
-The script checks for existing `.git`, `azure.yaml`, and agent files before running `azd ai agent init`. If `SAFE_AZD_INIT=skipped` (azure.yaml already exists), continue to validation. If `SAFE_AZD_INIT=clobber-risk`, show the user the flagged files and ask for confirmation. If `SAFE_AZD_INIT=blocked`, print the recommended command and let the user run it manually.
+**Exit handling:**
 
-If the user prefers a manual scaffold over `azd ai agent init`, create a minimal `azure.yaml` using the template in **foundry-deploy** / `reference/SKILL.md` § "azure.yaml". Fill in: project name, location, model name + version, capacity 120 GlobalStandard, `infra: { provider: bicep, path: ./infra }`. **Do not author the Bicep yourself** — the `azd ai agent` extension creates `./infra/` on first `azd up`.
+- `0` → `PREPARE_DEPLOY=ok` on stdout. Continue to Step 4.
+- `2` → `FAIL_STAGE=<name>` on stdout. Parse `RECOVERY=...`, print it verbatim, STOP. Common failures:
+  - `FAIL_STAGE=safe-azd-init` + `SAFE_AZD_INIT=dockerfile-conflict` → user declared `deploy_mode: code` but a `Dockerfile` exists in the agent folder. Either delete the Dockerfile or switch to `deploy_mode: container` in `agent-capabilities.yaml`.
+  - `FAIL_STAGE=safe-azd-init` + `SAFE_AZD_INIT=schema-mismatch` → `agent.yaml` is in `template:`-wrapper form (AgentManifest) but the extension expects flat ContainerAgent. Use `langgraph-byo` template or hand-author `agent.yaml` per **foundry-deploy** § "ContainerAgent schema".
+  - `FAIL_STAGE=validate-azd-env-loc` → `azd` defaulted `AZURE_LOCATION` to the RG location, which differs from `target.location` (the Foundry account/project region). The wrapper already emits the exact `azd env set ...` recovery; run it then re-invoke `prepare-deploy.sh`.
+  - `FAIL_STAGE=validate-azure-yaml` → the extension scaffolded `host: containerapp` (or `language: docker`) for a `deploy_mode: code` agent. Edit `azure.yaml` to the manifest-correct values per the printed `RECOVERY_1` / `RECOVERY_2`.
+- `3` → wrapper is missing a sibling script; this is a packaging bug — STOP and surface to the user.
 
-### If present
-
-Validate:
-- [ ] `services.<svc>.host: containerapp` (Track H) or appropriate host (Track P)
-- [ ] `services.<svc>.project: ./agents/<name>` matches `${input:agent_path}`
-- [ ] `services.<svc>.config.deployments[].model.name` matches what we validated in Step 2.4
-- [ ] `infra.provider: bicep`, `infra.path: ./infra` exists
-- [ ] **Bicep params** (in `./infra/main.parameters.json` or `./infra/main.bicep`):
-  - `ENABLE_HOSTED_AGENTS = true`
-  - `ENABLE_CAPABILITY_HOST = false` ⚠️ (azd-extension scaffold default — azd does not provision the prerequisite Cosmos/AI Search/Storage resources. The platform supports capability hosts at runtime via `/add-capability-host` after `azd up` — see [`foundry-deploy/capability-host-bootstrap.md`](../skills/foundry-deploy/capability-host-bootstrap.md))
-  - `ENABLE_MONITORING = true`
+**Manual fallback (advanced).** If the user prefers to author `azure.yaml` by hand, see **foundry-deploy** § "azure.yaml" + `reference/SKILL.md`. The Bicep parameter floor still applies:
+- `ENABLE_HOSTED_AGENTS = true`
+- `ENABLE_CAPABILITY_HOST = false` ⚠️ (azd-extension scaffold default — capability hosts are bootstrapped post-deploy via `/add-capability-host`)
+- `ENABLE_MONITORING = true`
 
 ---
 
@@ -322,7 +316,11 @@ The **agent identities** (instance + blueprint) and **project MI** RBAC are auto
 apm audit
 ```
 
-If audit reports critical findings (hidden Unicode, prompt-injection, unauthorized sources), STOP and surface them. Do not proceed to `azd up` with a failing audit.
+**Interpreting the output (FB-19).** `apm audit` is a one-shot prompt-injection / hidden-Unicode / unauthorized-source linter on your customization tree (`.github/prompts/`, `.agents/skills/`, etc.). It does **not** validate your agent code or `azure.yaml`. Expect:
+
+- **`No findings`** → ok, continue.
+- **`info` / `warn`** → surface to user, continue unless they ask to address now.
+- **`critical`** → STOP. Critical findings (zero-width / RLO Unicode, base64-blobs that decode to prompts, sources not in the install set) signal an active supply-chain risk. Do not proceed to `azd up`. Run `apm audit --explain <finding-id>` for the per-finding remediation.
 
 ---
 
@@ -343,10 +341,12 @@ Print a final summary:
 Run `azd up` now? [y/N]
 ```
 
-- If **y**: execute `azd up` in the repo root. Stream output. Watch for:
-  - `provision` failures → surface Bicep error verbatim, suggest **foundry-failure-modes** lookup
-  - `azd ai agent` extension errors → check `ENABLE_CAPABILITY_HOST=false`, model deployment, region availability
-  - `postdeploy` RBAC errors → tell user to run `/configure-rbac` and then `azd deploy <service>`
+- If **y**: execute `azd up` in the repo root. Stream output. Classify failures **before** punting to **foundry-failure-modes**:
+  - **`InvalidResourceLocation` / `LocationNotAvailableForResourceType`** → cross-region mismatch. `azd` env `AZURE_LOCATION` is for the resource group, but the manifest `target.location` is for the Foundry account/project. The wrapper's `validate-azd-env-loc` stage should have caught this — if it did not, re-run `.agents/skills/foundry-deploy/scripts/validate-azd-env-location.sh ${input:agent_path}` and follow the printed `RECOVERY`. See **foundry-failure-modes** § FM-XX (cross-region).
+  - **`No such file or directory: Dockerfile`** (during `azd deploy` even though `deploy_mode: code` was declared) → `azure.yaml` `services.<svc>.language: docker` is wrong; the extension silently scaffolded the container path. Fix per `validate-azure-yaml.sh` `RECOVERY_*`. See **foundry-failure-modes** § FM-YY (deploy-mode mismatch).
+  - **`provision` Bicep errors** → surface verbatim, then suggest **foundry-failure-modes** lookup
+  - **`azd ai agent` extension errors** → check `ENABLE_CAPABILITY_HOST=false`, model deployment, region availability
+  - **`postdeploy` RBAC errors** → tell user to run `/configure-rbac` and then `azd deploy <service>`
   - On success: print Phase B reminder (below).
 - If **N** or no: print the exact `azd up` command, and the Phase B reminder.
 

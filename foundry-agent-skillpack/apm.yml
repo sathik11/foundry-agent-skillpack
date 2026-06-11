@@ -1,5 +1,112 @@
 name: foundry-agent-skillpack
-version: 0.26.0
+version: 0.27.0
+# v0.27.0:
+#   - Closes 21 Round-1 dogfood-test feedback entries (FB-1 … FB-21 — see
+#     FEEDBACK_LOG.md). Three core wins:
+#     1. **Approval cardinality collapse (FB-14).** The pre-`azd up` pipeline
+#        went from ~12 separate tool approvals in v0.26 to ≤4 via a new
+#        composite wrapper `foundry-deploy/scripts/prepare-deploy.sh` that
+#        chains read-topology → preflight-azd → sync-azd-env → safe-azd-init
+#        → validate-azd-env-location → validate-azure-yaml → one composite
+#        agent_status.py stamp. /prepare-deploy Step 3 is now one bash block.
+#     2. **azd up correctness quadruple (FB-15, FB-18, FB-20, FB-21).**
+#        `safe-azd-init.sh` is now manifest-aware: forks on `deploy_mode`
+#        (container vs code), passes `--location` from `target.location` to
+#        prevent cross-region drift, refuses to run when `deploy_mode: code`
+#        is declared but a Dockerfile exists, and refuses when the manifest
+#        is in `template:`-wrapper form for a path that needs flat
+#        ContainerAgent. Two new validators (`validate-azd-env-location.sh`,
+#        `validate-azure-yaml.sh`) cross-check `azd env get-value AZURE_LOCATION`
+#        and `azure.yaml services.<svc>.language` post-init against the
+#        manifest. Two new failure modes documented: F-29 (cross-region
+#        `InvalidResourceLocation`) and F-30 (`azd deploy` Dockerfile-not-found
+#        when extension silently scaffolds container path for `deploy_mode: code`).
+#     3. **Plumbing-leak elimination (FB-4, FB-8, FB-9, FB-10, FB-12, FB-13,
+#        FB-16, FB-17).** Inline azd/az --help probes, raw `azd env set` lines,
+#        Python heredocs for topology reads, curl loops for MCP endpoint
+#        reachability, and inline `azd version`/`azd ext list` parsing are all
+#        replaced with named scripts that emit KV on stdout, human context on
+#        stderr, with structured exit codes and `RECOVERY=...` lines on fail.
+#   - New scripts under `foundry-deploy/scripts/`:
+#     * `prepare-deploy.sh` — single-approval wrapper, the FB-14 capstone.
+#     * `preflight-azd.sh` — H6/H7/H8/H9/H10 gate (azd, azure.ai.agents ext,
+#       az CLI, login, --deploy-mode code support) in one call. Reads floors
+#       from new `versions.yaml`.
+#     * `sync-azd-env.sh` — single-approval `azd env set` batch. Sets
+#       AZURE_LOCATION, MODEL_DEPLOYMENT_NAME, USE_EXISTING_AI_PROJECT=true
+#       (when account+project both populated), ACR vars (container mode only).
+#     * `validate-azd-env-location.sh` — diffs `azd env AZURE_LOCATION` vs
+#       manifest `target.location`, emits exact `azd env set` RECOVERY on
+#       mismatch (FB-20).
+#     * `validate-azure-yaml.sh` — post-init check that
+#       `services.<svc>.language` + Dockerfile presence match `deploy_mode`.
+#       Map: container→docker, code+python_3_*→py, code+dotnet_*→dotnetcore.
+#       Emits RECOVERY_1/RECOVERY_2/... per mismatch (FB-21).
+#     * `read-topology.sh` — KV reader for cached `./assessment/project-topology.json`.
+#       Flags `--json <jq-path>`, `--topology-file <path>`. Emits well-known
+#       fields (SUBSCRIPTION_ID, RESOURCE_GROUP, ACCOUNT_NAME, ACCOUNT_LOCATION,
+#       PROJECT_NAME, PROJECT_LOCATION, ACR_NAME, DEPLOYMENT_COUNT,
+#       CAPHOST_PRESENT, NETWORK_INJECTION, AGENT_COUNT). Replaces inline
+#       Python heredocs (FB-12).
+#     * `discover-acr.sh` — inspects linked ACR via `az acr show` + repository
+#       list + top-5 tag-orderby-time, distinguishes 403/Unauthorized from
+#       empty-but-reachable. Caps repository list at 20 (FB-6).
+#     * `probe-mcp-endpoint.sh` — curl wrapper. Treats 200/401/403/405/426 as
+#       REACHABLE. Configurable timeout via `MCP_PROBE_TIMEOUT_S` env (default
+#       8s). Emits MCP_HTTP_STATUS, MCP_LATENCY_MS, MCP_REACHABLE, MCP_ERROR.
+#       Replaces inline curl plumbing (FB-13).
+#   - New reference file `foundry-deploy/versions.yaml` — canonical version
+#     floors for azd, azure.ai.agents extension, az CLI, azure-ai-projects.
+#     Defaults baked into `preflight-azd.sh` DEFAULT_* constants in lockstep
+#     (in case versions.yaml is unreadable). "Last reviewed: 2026-06-11
+#     (skillpack v0.27.0)".
+#   - `safe-azd-init.sh` rewritten to be manifest-aware. Reads `deploy_mode`,
+#     `model.deployment`, `code.protocol`, `target.location`, `code.runtime`,
+#     `code.entry_point`, `code.dependency_resolution` directly from
+#     `agent-capabilities.yaml` and auto-derives all flags. CLI EXTRA_FLAGS
+#     take precedence via `has_flag` override check. New exit codes: 4
+#     (manifest-incomplete for code mode), 5 (schema-mismatch). Emits
+#     DEPLOY_MODE, MODEL_DEPLOYMENT, LOCATION, SAFE_AZD_INIT=success|failed,
+#     AZURE_YAML=created|exists.
+#   - `/prepare-deploy` prompt: Step 0 azd/ext preflight is now one
+#     `preflight-azd.sh` call (FB-8/9/10/17 — was raw bash). Step 3 is one
+#     `prepare-deploy.sh` call (FB-14 — was ~8 separate steps). Step 2.5
+#     stamp-into-status uses composite `update --section` instead of per-field
+#     `update --path` (FB-14). Step 5 `apm audit` adds verdict interpretation
+#     (FB-19). Step 6 `azd up` failure classifier adds F-29 + F-30 explicit
+#     branches (FB-20, FB-21).
+#   - `/assess-project` prompt: new Step 0 (subscription_id + resource_group
+#     picker via MCP picklists when blank; never default-pick — FB-2).
+#     Empty-input refusal moved to Step 0 (FB-3). New "Zero-deployment
+#     assist" block under Step 3 emits copy-pasteable `az cognitiveservices
+#     account deployment create` block when `DEPLOYMENT_COUNT=0` (FB-5).
+#     Hard rules near top forbidding chat-session-resources/content.json
+#     reads and requiring `select-model.sh` for model discovery (FB-11).
+#     Two new entries in Forbidden Shortcuts reinforcing FB-2 + FB-11.
+#   - `/plan-agent` Step 3 #6 clarified: guardrails vendoring is conditional
+#     on Step 4's capability interview declaring `guardrails.layers:
+#     [middleware]`. Added rationale for why per-agent vendoring (vs shared
+#     import) is preferred — each agent typically tunes constructor args /
+#     blocked-token sets / severity floors (FB-7).
+#   - `foundry-failure-modes/SKILL.md`: added F-29 (cross-region) + F-30
+#     (deploy-mode mismatch / silent container scaffold). Bumped description
+#     "32 → 34 verified failure modes". Quick Triage table got two new rows.
+#   - `foundry-deploy/code-deploy.md`: added explicit callout that even the
+#     current (≥ 0.1.27-preview) extension silently scaffolds the container
+#     path in certain corner cases (stray Dockerfile, missing
+#     `--deploy-mode code` flag). Points to the two gates that close the gap.
+#   - `foundry-agent-skillpack/README.md` install snippet now pairs both
+#     skillpack + playbook `apm install` lines with a one-line explanation
+#     (FB-1 — the playbook install was easy to miss).
+#   - **CI fix (out-of-band):** `.github/workflows/apm-install-test.yml` was
+#     doubly stale and failing in 1.1s on every push since the repo rename
+#     (referenced old `sathik11/Foundry-Hosted-Agent-Skill/foundry-agent-engineering`
+#     instead of `sathik11/foundry-agent-skillpack/foundry-agent-skillpack`,
+#     and lacked the now-required explicit `targets:` block). Fixed the
+#     dependency strings to current names, added `targets: [copilot,
+#     agent-skills]`, added the playbook as a second dependency, and
+#     tightened the post-install assertions to check `.github/prompts/` +
+#     `.agents/skills/foundry-deploy/` rather than a generic `-o` chain.
 # v0.26.0:
 #   - Closes TD-32: Pre-development Foundry project topology discovery was
 #     missing entirely. Skills assumed the user already knew the project's

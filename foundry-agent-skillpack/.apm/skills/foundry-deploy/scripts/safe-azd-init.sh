@@ -1,104 +1,253 @@
 #!/usr/bin/env bash
-# Guard wrapper for `azd ai agent init`. Checks for hazards before running.
+# Manifest-aware guard wrapper for `azd ai agent init`. Reads
+# agent-capabilities.yaml and threads the right flags so the init step
+# scaffolds the path the manifest declared.
 #
-# Hazards:
-#   1. Existing .git — azd init can reinitialize it.
-#   2. Existing azure.yaml — azd init may overwrite.
-#   3. Existing agent files (agent.yaml, main.py, Dockerfile) — would be clobbered.
+# Fixes:
+#   FB-15 — Validate agent.yaml schema (AgentManifest vs ContainerAgent)
+#           BEFORE running init, so we don't leave orphan state mid-init.
+#   FB-20 — Pass --location <target.location> explicitly so init doesn't
+#           infer from the resource group.
+#   FB-21 — Fork on deploy_mode and pass --deploy-mode + --runtime +
+#           --entry-point + --dep-resolution when manifest says `code`. The
+#           old script was a transparent passthrough and silently scaffolded
+#           the container path when the prompt forgot to pass the flag.
+#
+# Hazards (carried forward from v0.26):
+#   1. Existing .git — informational
+#   2. Existing azure.yaml — idempotent skip
+#   3. Existing agent files — require --src or block
 #
 # Usage:
-#   ./safe-azd-init.sh <agent_path> [azd ai agent init flags...]
+#   ./safe-azd-init.sh <agent_path> [extra-azd-init-flags...]
 #
-# Example:
-#   ./safe-azd-init.sh agents/my-agent \
-#     --manifest agents/my-agent/agent.yaml \
-#     --src agents/my-agent \
-#     --model-deployment gpt-5.4-1 \
-#     --protocol responses
+#   The script auto-derives --manifest, --src, --model-deployment,
+#   --protocol, --deploy-mode, --runtime, --entry-point, --dep-resolution,
+#   and --location from <agent_path>/agent-capabilities.yaml. Extra flags
+#   passed on the CLI take precedence over derived values.
 #
 # Exit codes:
-#   0 — azd init ran successfully (or was skipped because azure.yaml already exists).
-#   1 — hazard detected; user must confirm or resolve.
-#   2 — azd init failed for another reason.
+#   0 — azd init ran successfully (or was skipped because azure.yaml exists)
+#   1 — hazard detected; user must confirm or resolve (CLOBBER_RISK or BLOCKED)
+#   2 — azd init failed for another reason
+#   4 — manifest missing required fields (e.g. target.location, model.deployment)
+#   5 — agent.yaml schema mismatch (would fail init partway)
 set -euo pipefail
 
-AGENT_PATH="${1:?usage: $0 <agent_path> [azd-init-flags...]}"
+AGENT_PATH="${1:?usage: $0 <agent_path> [extra-azd-init-flags...]}"
 shift
+EXTRA_FLAGS=("$@")
 
-# Resolve workspace root (walk up from agent_path to find apm.yml or .git)
 WORKSPACE_ROOT="$(pwd)"
+MANIFEST="$AGENT_PATH/agent-capabilities.yaml"
+AGENT_YAML="$AGENT_PATH/agent.yaml"
 
-HAZARDS=()
+# --------------------------------------------------------------------------
+# 0. Read manifest (deploy_mode, model, location, code.*).
+# --------------------------------------------------------------------------
+read_yaml() {
+  local file="$1" path="$2"
+  if command -v yq >/dev/null 2>&1; then
+    yq -r "$path // \"\"" "$file" 2>/dev/null || echo ""
+  else
+    python3 -c "
+import yaml
+with open('$file') as f: d = yaml.safe_load(f) or {}
+keys = '''$path'''.lstrip('.').split('.')
+v = d
+for k in keys:
+    if not isinstance(v, dict): v = ''; break
+    v = v.get(k, '')
+print(v if v is not None else '')
+" 2>/dev/null
+  fi
+}
 
-# --- Check 1: .git exists ---
-if [[ -d "$WORKSPACE_ROOT/.git" ]]; then
-  echo "[i] .git exists at workspace root — azd init may try to reinitialize." >&2
-  # This is informational, not blocking. azd usually handles this OK.
+DEPLOY_MODE=""
+MODEL_DEPLOYMENT=""
+PROTOCOL=""
+LOCATION=""
+CODE_RUNTIME=""
+CODE_ENTRY_POINT=""
+CODE_DEP_RESOLUTION=""
+
+if [[ -f "$MANIFEST" ]]; then
+  DEPLOY_MODE="$(read_yaml "$MANIFEST" '.deploy_mode')"
+  MODEL_DEPLOYMENT="$(read_yaml "$MANIFEST" '.model.deployment')"
+  PROTOCOL="$(read_yaml "$MANIFEST" '.code.protocol')"
+  LOCATION="$(read_yaml "$MANIFEST" '.target.location')"
+  CODE_RUNTIME="$(read_yaml "$MANIFEST" '.code.runtime')"
+  CODE_ENTRY_POINT="$(read_yaml "$MANIFEST" '.code.entry_point')"
+  CODE_DEP_RESOLUTION="$(read_yaml "$MANIFEST" '.code.dependency_resolution')"
+fi
+[[ -z "$DEPLOY_MODE" ]] && DEPLOY_MODE="container"  # historic default
+[[ -z "$PROTOCOL"   ]] && PROTOCOL="responses"
+
+# Flag-override detection: if the caller passed an explicit value for a
+# derived flag, respect it. Only auto-derive when the flag is absent.
+has_flag() {
+  local needle="$1"
+  for arg in "${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}"; do
+    [[ "$arg" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+# --------------------------------------------------------------------------
+# 1. Schema validation (FB-15). agent.yaml must be AgentManifest shape
+#    (with a 'template:' wrapper) when we are going to pass --manifest.
+# --------------------------------------------------------------------------
+if [[ -f "$AGENT_YAML" ]]; then
+  if command -v yq >/dev/null 2>&1; then
+    HAS_TEMPLATE="$(yq -r '.template // ""' "$AGENT_YAML" 2>/dev/null)"
+    KIND_TOP="$(yq -r '.kind // ""' "$AGENT_YAML" 2>/dev/null)"
+  else
+    HAS_TEMPLATE="$(python3 -c "
+import yaml
+with open('$AGENT_YAML') as f: d = yaml.safe_load(f) or {}
+print(d.get('template') or '')" 2>/dev/null)"
+    KIND_TOP="$(python3 -c "
+import yaml
+with open('$AGENT_YAML') as f: d = yaml.safe_load(f) or {}
+print(d.get('kind') or '')" 2>/dev/null)"
+  fi
+  if [[ -z "$HAS_TEMPLATE" && -n "$KIND_TOP" ]]; then
+    {
+      echo "[x] $AGENT_YAML is ContainerAgent schema (top-level 'kind:'),"
+      echo "    but \`azd ai agent init --manifest\` expects AgentManifest schema"
+      echo "    (with a 'template:' wrapper)."
+      echo
+      echo "    See foundry-deploy/templates/langgraph-byo/agent.manifest.yaml.template"
+      echo "    for the correct shape. /plan-agent v0.27.0 emits both schemas."
+    } >&2
+    echo "SAFE_AZD_INIT=schema-mismatch"
+    echo "AGENT_YAML_SCHEMA=ContainerAgent"
+    echo "EXPECTED_SCHEMA=AgentManifest"
+    exit 5
+  fi
 fi
 
-# --- Check 2: azure.yaml already exists ---
+# --------------------------------------------------------------------------
+# 2. Hazard checks (carried forward, slightly tightened).
+# --------------------------------------------------------------------------
+if [[ -d "$WORKSPACE_ROOT/.git" ]]; then
+  echo "[i] .git exists at workspace root — azd init may try to reinitialize." >&2
+fi
+
 if [[ -f "$WORKSPACE_ROOT/azure.yaml" ]]; then
   echo "[✓] azure.yaml already exists. Skipping azd ai agent init (idempotent)." >&2
   echo "SAFE_AZD_INIT=skipped"
   echo "AZURE_YAML=exists"
+  echo "DEPLOY_MODE=$DEPLOY_MODE"
   exit 0
 fi
 
-# --- Check 3: agent files that would be overwritten ---
 CLOBBER_FILES=()
-for f in agent.yaml main.py Dockerfile requirements.txt; do
+for f in main.py Dockerfile requirements.txt; do
   if [[ -f "$AGENT_PATH/$f" ]]; then
     CLOBBER_FILES+=("$AGENT_PATH/$f")
   fi
 done
+
+# deploy_mode: code MUST NOT have a Dockerfile (would confuse azd's auto-detect)
+if [[ "$DEPLOY_MODE" == "code" && -f "$AGENT_PATH/Dockerfile" ]]; then
+  echo "[x] deploy_mode: code MUST NOT have a Dockerfile at $AGENT_PATH/Dockerfile." >&2
+  echo "    Remove it before running azd ai agent init." >&2
+  echo "SAFE_AZD_INIT=dockerfile-conflict"
+  exit 1
+fi
 
 if (( ${#CLOBBER_FILES[@]} > 0 )); then
   echo "[!] azd ai agent init may overwrite these existing files:" >&2
   for f in "${CLOBBER_FILES[@]}"; do
     echo "    - $f" >&2
   done
-  echo >&2
-  echo "[i] The --src flag tells azd where existing source lives." >&2
-  echo "    If your agent code is already complete, you may only need" >&2
-  echo "    'azd init' (not 'azd ai agent init') to scaffold azure.yaml." >&2
-  echo >&2
   echo "SAFE_AZD_INIT=clobber-risk"
   echo "CLOBBER_FILES=${CLOBBER_FILES[*]}"
 
-  # Still proceed if the caller passed --src pointing to the agent path
-  # (azd should respect existing files when --src is explicit)
-  HAS_SRC=false
-  for arg in "$@"; do
-    [[ "$arg" == "--src" ]] && HAS_SRC=true
-  done
-
-  if [[ "$HAS_SRC" == "true" ]]; then
-    echo "[i] --src flag detected — azd should respect existing source files." >&2
-  else
-    echo "[x] No --src flag. Add '--src $AGENT_PATH' to protect existing files." >&2
-    HAZARDS+=("no-src-flag")
+  if ! has_flag --src; then
+    echo "[i] No --src flag; adding --src $AGENT_PATH so existing files are respected." >&2
   fi
 fi
 
-# --- If hazards remain, emit the command but don't execute ---
-if (( ${#HAZARDS[@]} > 0 )); then
-  echo >&2
-  echo "### Recommended command (review before running):" >&2
-  echo "  azd ai agent init --src $AGENT_PATH $*" >&2
-  echo >&2
-  echo "SAFE_AZD_INIT=blocked"
-  exit 1
+# --------------------------------------------------------------------------
+# 3. Assemble the canonical flag set from manifest. Caller overrides win.
+# --------------------------------------------------------------------------
+DERIVED_FLAGS=()
+
+if ! has_flag --manifest && [[ -f "$AGENT_YAML" ]]; then
+  DERIVED_FLAGS+=(--manifest "$AGENT_YAML")
+fi
+if ! has_flag --src; then
+  DERIVED_FLAGS+=(--src "$AGENT_PATH")
+fi
+if ! has_flag --model-deployment && [[ -n "$MODEL_DEPLOYMENT" ]]; then
+  DERIVED_FLAGS+=(--model-deployment "$MODEL_DEPLOYMENT")
+fi
+if ! has_flag --protocol; then
+  DERIVED_FLAGS+=(--protocol "$PROTOCOL")
+fi
+if ! has_flag --location && [[ -n "$LOCATION" ]]; then
+  # FB-20: pass project location explicitly so init doesn't infer from RG.
+  DERIVED_FLAGS+=(--location "$LOCATION")
 fi
 
-# --- Safe to run ---
-echo "[+] Running: azd ai agent init $*" >&2
-if azd ai agent init "$@" 2>&1; then
+# FB-21: fork on deploy_mode and pass code-specific flags.
+if [[ "$DEPLOY_MODE" == "code" ]]; then
+  if ! has_flag --deploy-mode; then
+    DERIVED_FLAGS+=(--deploy-mode code)
+  fi
+  if ! has_flag --runtime && [[ -n "$CODE_RUNTIME" ]]; then
+    DERIVED_FLAGS+=(--runtime "$CODE_RUNTIME")
+  fi
+  if ! has_flag --entry-point && [[ -n "$CODE_ENTRY_POINT" ]]; then
+    DERIVED_FLAGS+=(--entry-point "$CODE_ENTRY_POINT")
+  fi
+  if ! has_flag --dep-resolution && [[ -n "$CODE_DEP_RESOLUTION" ]]; then
+    DERIVED_FLAGS+=(--dep-resolution "$CODE_DEP_RESOLUTION")
+  fi
+
+  # Required fields for code-deploy. If any are still missing, refuse.
+  if [[ -z "$CODE_RUNTIME" || -z "$CODE_ENTRY_POINT" || -z "$CODE_DEP_RESOLUTION" ]]; then
+    {
+      echo "[x] deploy_mode: code requires code.runtime, code.entry_point, code.dependency_resolution"
+      echo "    in $MANIFEST. Currently:"
+      echo "      code.runtime: ${CODE_RUNTIME:-<empty>}"
+      echo "      code.entry_point: ${CODE_ENTRY_POINT:-<empty>}"
+      echo "      code.dependency_resolution: ${CODE_DEP_RESOLUTION:-<empty>}"
+    } >&2
+    echo "SAFE_AZD_INIT=manifest-incomplete"
+    exit 4
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# 4. Run init.
+# --------------------------------------------------------------------------
+ALL_FLAGS=("${DERIVED_FLAGS[@]+"${DERIVED_FLAGS[@]}"}" "${EXTRA_FLAGS[@]+"${EXTRA_FLAGS[@]}"}")
+
+{
+  echo "[+] Running: azd ai agent init \\"
+  for ((i=0; i<${#ALL_FLAGS[@]}; i+=2)); do
+    if (( i+1 < ${#ALL_FLAGS[@]} )); then
+      echo "    ${ALL_FLAGS[i]} ${ALL_FLAGS[i+1]} \\"
+    else
+      echo "    ${ALL_FLAGS[i]}"
+    fi
+  done
+} >&2
+
+echo "DEPLOY_MODE=$DEPLOY_MODE"
+echo "MODEL_DEPLOYMENT=$MODEL_DEPLOYMENT"
+echo "LOCATION=$LOCATION"
+
+if azd ai agent init "${ALL_FLAGS[@]}" 2>&1; then
   echo "SAFE_AZD_INIT=success"
   echo "AZURE_YAML=created"
   echo "[✓] azd ai agent init completed." >&2
   exit 0
 else
   echo "SAFE_AZD_INIT=failed"
-  echo "[x] azd ai agent init failed." >&2
+  echo "[x] azd ai agent init failed. Run validate-azure-yaml.sh after fixing." >&2
   exit 2
 fi

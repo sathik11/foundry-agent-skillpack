@@ -15,6 +15,11 @@ You are a Foundry Agent Engineer running a **read-only audit** of a Foundry proj
 
 > **Read-only contract.** This prompt MUST NOT create, modify, or delete any Azure resource. Every call is `GET`. If a downstream skill suggests a mutation, route the user back to `/plan-agent` or `/prepare-deploy`.
 
+> **Hard rules — do not violate (FB-11).**
+> 1. **NEVER** read `chat-session-resources/`, `content.json`, `*/copilot-chat/**`, or any path under `.vscode-server/` to enumerate models, regions, or subscriptions. Those files are session caches; they are out of contract and frequently stale. Use the MCP tools and helper scripts only.
+> 2. For **model discovery / deployment**, always call `.agents/skills/foundry-deploy/scripts/select-model.sh` (or `mcp_foundry_mcp_model_*`). Do not paste a model name from a recipe / fixture / previous chat.
+> 3. Helper scripts emit KV on stdout and human context on stderr. **Do not echo the entire stderr back to the user** — read the verdict + recovery only. The wrapper's progress lines are for you, not for the user.
+
 ## When this prompt is the right call
 
 This prompt is the general-purpose **"what is the shape of this Foundry project?"** answer for the skillpack. Six scenarios make it the right call:
@@ -29,6 +34,16 @@ This prompt is the general-purpose **"what is the shape of this Foundry project?
 ## Foundry Toolkit boundary
 
 This prompt does **not** browse the model catalog, deploy models from a card click, or render an interactive Toolboxes UI. Defer to [Foundry Toolkit](https://aka.ms/foundry-toolkit) for those flows. This prompt owns: **verdict** (✅/⚠/❌), **stub manifest** generation, and integration with the rest of the skillpack lifecycle (`/plan-agent`, `/prepare-deploy`, `/troubleshoot`). See [`project-topology.md § Foundry Toolkit boundary`](../../apm_modules/_local/foundry-agent-skillpack/.apm/skills/foundry-deploy/project-topology.md#foundry-toolkit-boundary).
+
+## Step 0 — Resolve `subscription_id` and `resource_group` (FB-2, FB-3)
+
+The wrapper's first two positional args are required. Empty strings cause positional shift and a confusing error. Validate **before** the wrapper call:
+
+1. **If `${input:subscription_id}` is empty or literally `""`:** call `mcp_azure_mcp_ser_subscription_list` and present the result as a numbered picklist. Wait for the user. Re-stamp `${input:subscription_id}` with the chosen UUID. Do **not** default-pick.
+2. **If `${input:resource_group}` is empty or literally `""`:** call `mcp_azure_mcp_ser_group_list` with the chosen subscription. Present the result as a numbered picklist. Wait for the user. Re-stamp `${input:resource_group}`. Do **not** default-pick.
+3. **If both were already populated:** echo them back to the user once for confirmation ("Auditing subscription **\<id\>** / RG **\<name\>**."), then continue.
+
+> Empty inputs are a **verdict, not "ok"** — do not pass them to the wrapper unresolved. The wrapper will exit non-zero on the missing positional arg and force the user to re-run.
 
 ## Step 1 — Run assessment (preflight + discover + format in one call)
 
@@ -143,6 +158,32 @@ Read `$OUT_DIR/project-topology.md` and print it to the user verbatim (preserve 
 
 For each ❌ or ⚠ verdict, the referenced skill path (column 4 of the table) tells the user where to read for the fix. **Do not auto-execute a fix.** This is an audit; remediation is a separate prompt run.
 
+### Zero-deployment assist (FB-5)
+
+If `project-topology.json` has `deployments[]` empty (`DEPLOYMENT_COUNT=0`), the project will fail every downstream `/plan-agent` model interview. Surface a copy-pasteable bootstrap block alongside the verdict (do **not** auto-run it — model deployment is a mutation):
+
+```bash
+# Pick a current Foundry-supported model + version via the helper (NEVER hand-pick from a recipe).
+.agents/skills/foundry-deploy/scripts/select-model.sh \
+    --subscription "${input:subscription_id}" \
+    --resource-group "${input:resource_group}" \
+    --account "<account_name>" \
+    --project "<project_name>"
+
+# Then create the deployment (substitute the chosen MODEL_NAME / MODEL_VERSION / DEPLOYMENT_NAME):
+az cognitiveservices account deployment create \
+    --resource-group "${input:resource_group}" \
+    --name "<account_name>" \
+    --deployment-name "<DEPLOYMENT_NAME>" \
+    --model-name "<MODEL_NAME>" \
+    --model-version "<MODEL_VERSION>" \
+    --model-format OpenAI \
+    --sku-capacity 120 \
+    --sku-name GlobalStandard
+```
+
+After the user creates a deployment, re-run `/assess-project` to refresh the topology. The new deployment will appear in `project-topology.json` `deployments[]` and the verdict table will flip the row from ❌ to ✅.
+
 ## Step 4 — Offer to use the stub
 
 If `agent-capabilities.draft.yaml` was written and the user wants to start a new agent, offer:
@@ -169,4 +210,6 @@ Do NOT offer this remediation if the row is ✅ — the project capHost is fully
 - ❌ Do NOT mutate `agent-capabilities.yaml` directly. The stub is `agent-capabilities.draft.yaml` — promoting it is a deliberate `mv` after the user reviews every `TODO`.
 - ❌ Do NOT deploy a model, create a connection, or change `publicNetworkAccess` from this prompt. Route the user back to `/plan-agent` / `/prepare-deploy`.
 - ❌ Do NOT call `/add-capability-host` directly without first showing the dry-run output to the user — it WILL mutate the Foundry account when run with `--no-dry-run`.
+- ❌ Do NOT read `chat-session-resources/`, `content.json`, or any path under `.vscode-server/` to enumerate models / regions / subscriptions. Those are session caches and out of contract. Use MCP tools + `select-model.sh` only (FB-11).
+- ❌ Do NOT default-pick the first subscription or RG when the user left them blank. Always show the MCP picklist (FB-2).
 

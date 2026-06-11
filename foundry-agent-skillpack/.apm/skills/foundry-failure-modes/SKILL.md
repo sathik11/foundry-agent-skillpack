@@ -1,6 +1,6 @@
 ---
 name: foundry-failure-modes
-description: 32 verified failure modes (incl. code-deploy preview) with symptom-to-fix lookup for Foundry hosted agents
+description: 34 verified failure modes (incl. code-deploy preview + cross-region + deploy-mode mismatch) with symptom-to-fix lookup for Foundry hosted agents
 ---
 
 # Foundry Failure Modes
@@ -24,6 +24,8 @@ description: 32 verified failure modes (incl. code-deploy preview) with symptom-
 | Code version stuck in `creating` >10 min | `remote_build` can't resolve a dep | Switch to `dependency_resolution: bundled` (F-25) |
 | `ModuleNotFoundError` at first invoke | Wrong wheel platform / raw `.whl` in `packages/` | Rebuild with `--platform manylinux2014_x86_64 --only-binary=:all:` (F-26) |
 | Identical zip redeploy = no new version | Content-addressable dedup (expected) | Compare zip SHA-256 + manifest; not a regression |
+| `azd up` `InvalidResourceLocation` / `LocationNotAvailableForResourceType` | Cross-region BYO: `AZURE_LOCATION` ≠ Foundry project region | `azd env set AZURE_LOCATION <target.location> && azd env set USE_EXISTING_AI_PROJECT true` (F-29) |
+| `azd deploy` `No such file or directory: Dockerfile` (declared `deploy_mode: code`) | Extension silently scaffolded container path | Edit `azure.yaml` `language` to `py` or `dotnetcore` (F-30); re-run `/prepare-deploy` |
 
 ## Deployment Failures
 
@@ -89,4 +91,20 @@ See [foundry-deploy/code-deploy.md](../foundry-deploy/code-deploy.md) for the fu
   TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv)
   ```
   If the call is `403 Forbidden` instead of `401`, see TD-30: caller needs `Foundry Project Manager` at project scope to deploy code-based agents. Run `.agents/skills/foundry-roles/scripts/preflight-role.sh project foundry-project-manager <sub> <rg> <account> <project>`.
+- **F-29 `400 InvalidResourceLocation` / `LocationNotAvailableForResourceType`** during `azd up` provision (cross-region BYO project): `azd` defaulted `AZURE_LOCATION` to the **resource group's** region, but the Foundry account / project lives in a different region. `azd ai agent init` infers location from the RG and silently writes the wrong value into the env. Symptom: provision tries to create a Cognitive Services deployment in a region the model SKU isn't available in.
+  - **Diagnose**: `azd env get-value AZURE_LOCATION` and compare with `target.location` in `agent-capabilities.yaml`.
+  - **Fix**:
+    ```bash
+    azd env set AZURE_LOCATION <manifest.target.location>
+    azd env set USE_EXISTING_AI_PROJECT true
+    ```
+    The `USE_EXISTING_AI_PROJECT=true` toggle is the documented opt-out from the project-creation Bicep — when the project already exists in another region, set this so `azd up` skips the create step entirely.
+  - **Prevent**: the `prepare-deploy.sh` wrapper's `validate-azd-env-location.sh` stage catches this before `azd up` runs. If you skipped `/prepare-deploy`, re-run it.
+- **F-30 `azd deploy` fails with `language: docker` mismatch / `No such file or directory: Dockerfile`** (declared `deploy_mode: code`): the current `azure.ai.agents` extension silently scaffolds the container path even when `--deploy-mode code` was on the init command, leaving `azure.yaml` `services.<svc>.language: docker` and a missing Dockerfile. Symptom: `azd up` provision succeeds, then `azd deploy` cannot find a Dockerfile to build.
+  - **Diagnose**: `yq -r '.services.*.language' azure.yaml` and `ls Dockerfile`. If `language: docker` AND no Dockerfile AND manifest says `deploy_mode: code` → this is F-30.
+  - **Fix**: edit `azure.yaml` to set `services.<svc>.language` to the correct value for the chosen runtime:
+    - `python_3_13` / `python_3_14` → `language: py`
+    - `dotnet_10` → `language: dotnetcore`
+  - And ensure no `Dockerfile` is present in the agent folder (delete it or move to a different path — its presence will re-trigger the container scaffolder if you re-init).
+  - **Prevent**: the `prepare-deploy.sh` wrapper's `validate-azure-yaml.sh` stage catches this. The rewritten `safe-azd-init.sh` (v0.27+) also refuses to run when `deploy_mode: code` is declared but a Dockerfile is present.
 
