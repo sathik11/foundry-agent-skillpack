@@ -26,6 +26,7 @@ description: 34 verified failure modes (incl. code-deploy preview + cross-region
 | Identical zip redeploy = no new version | Content-addressable dedup (expected) | Compare zip SHA-256 + manifest; not a regression |
 | `azd up` `InvalidResourceLocation` / `LocationNotAvailableForResourceType` | Cross-region BYO: `AZURE_LOCATION` ≠ Foundry project region | `azd env set AZURE_LOCATION <target.location> && azd env set USE_EXISTING_AI_PROJECT true` (F-29) |
 | `azd deploy` `No such file or directory: Dockerfile` (declared `deploy_mode: code`) | Extension silently scaffolded container path | Edit `azure.yaml` `language` to `py` or `dotnetcore` (F-30); re-run `/prepare-deploy` |
+| Capability-host provision returns 403 on Cosmos / AI Search / Storage (looks like RBAC) | Foundry account is public but backing resource has `publicNetworkAccess=Disabled` (or vice-versa) | Match the network posture: flip backing resource to `publicNetworkAccess=Enabled`, or put both behind a PE/VNet (F-31) |
 
 ## Deployment Failures
 
@@ -107,4 +108,27 @@ See [foundry-deploy/code-deploy.md](../foundry-deploy/code-deploy.md) for the fu
     - `dotnet_10` → `language: dotnetcore`
   - And ensure no `Dockerfile` is present in the agent folder (delete it or move to a different path — its presence will re-trigger the container scaffolder if you re-init).
   - **Prevent**: the `prepare-deploy.sh` wrapper's `validate-azure-yaml.sh` stage catches this. The rewritten `safe-azd-init.sh` (v0.27+) also refuses to run when `deploy_mode: code` is declared but a Dockerfile is present.
+- **F-31 `403 Forbidden` on Cosmos / AI Search / Storage during capability-host provision (network mismatch masquerading as RBAC)**: capability-host PUT against `cosmos / search / storage` connections fails with a 403 that looks identical to a missing data-plane role assignment, but the actual cause is a `publicNetworkAccess` mismatch between the Foundry account/project and the backing resource. Wasted-investigation pattern: hours spent re-granting `Cosmos DB Built-in Data Contributor` / `Search Index Data Contributor` / `Storage Blob Data Owner` to the project MI before realising the role assignments were already correct.
+  - **Two-sided rule**: Foundry account + project + every backing capability-host resource (Cosmos DB, AI Search, Storage) must share the **same** network posture. Either all public, or all on the same VNet / private endpoint path. A public Foundry account cannot bind a private-only backing resource (no egress route), and a private Foundry account cannot bind a public-only backing resource (data-plane TLS auth refuses the cross-class call).
+  - **Diagnose**:
+    ```bash
+    # Foundry account posture
+    az cognitiveservices account show -g <rg> -n <account> \
+      --query 'properties.publicNetworkAccess' -o tsv
+    # Backing resources posture (one liner — adjust resource type per backing)
+    az cosmosdb show           -g <rg> -n <cosmos>  --query 'publicNetworkAccess' -o tsv
+    az search service show     -g <rg> -n <search>  --query 'publicNetworkAccess' -o tsv
+    az storage account show    -g <rg> -n <storage> --query 'publicNetworkAccess' -o tsv
+    ```
+    If the account is `Enabled` and any backing is `Disabled` (or vice-versa) → F-31.
+  - **Fix (public account, accidentally-private backing — most common during Bicep drift)**:
+    ```bash
+    az cosmosdb update        -g <rg> -n <cosmos>  --public-network-access Enabled
+    az search service update  -g <rg> -n <search>  --public-network-access Enabled
+    az storage account update -g <rg> -n <storage> --public-network-access Enabled
+    ```
+    Wait ~60s for the network ACL to propagate, then re-run `add-capability-host.sh`.
+  - **Fix (private account, accidentally-public backing — keep private)**: leave the backing private, add a private endpoint to it in the Foundry account's subnet/PE-pool, and confirm DNS resolves to the PE IP from the Foundry side. Do NOT flip the backing to public just to make the PUT succeed — that re-opens a data-egress hole the original network design intentionally closed.
+  - **Prevent**: `/assess-project` Step 7 surfaces the network class for the account but does NOT today cross-check backing resources. Tracked as a verifier gap — until then, every brownfield onboarding should run the three `az ... show --query publicNetworkAccess` calls above before `/add-capability-host`.
+  - **Why the 403 lies**: capability-host PUT runs as the project MI, so when the network layer rejects the data-plane handshake the platform-side AAD layer cannot distinguish "principal denied" from "TLS endpoint unreachable from this network class" and returns the safer of the two — `403`. There is no surfaced `WAF`/`network-acl` error code today.
 

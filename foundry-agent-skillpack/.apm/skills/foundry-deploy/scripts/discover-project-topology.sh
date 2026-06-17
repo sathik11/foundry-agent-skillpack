@@ -504,11 +504,23 @@ echo "DEPLOYMENT_OWN_ACCOUNT_NAME=$ACCT_NAME"
 # ----------------------------------------------------------------------------
 if [[ -n "$PROJ_ENDPOINT" ]]; then
   echo "[i] Listing hosted agents via control plane $PROJ_ENDPOINT (api-version=$AGENTS_API_VERSION)…" >&2
-  # F-28: must use --resource https://ai.azure.com (not management.azure.com)
+  # F-28: must use --resource https://ai.azure.com (not management.azure.com).
+  # Endpoint shape: `/agents` (Foundry hosted-agent collection — what `azd ai
+  # agent` / agent.yaml provisions). NOT `/assistants`, which is the legacy
+  # OpenAI Assistants-compatible surface (ephemeral, SDK-created objects with
+  # a separate lifecycle and a different per-project collection).
+  # Response envelope: OpenAI-pagination shape `{object, data:[...], first_id,
+  # last_id, has_more}` — verified live 2026-06-15 against api-version=v1.
+  # Each entry has `id` + `name` (both populated, name == id in current GA).
+  # Header `Foundry-Features: HostedAgents=V1Preview` is harmless on GET but
+  # kept for parity with mutating calls in rest-api.md.
   AGENTS_TOKEN=$(az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv 2>/dev/null || echo "")
   if [[ -n "$AGENTS_TOKEN" ]]; then
-    AGENTS_URL="${PROJ_ENDPOINT%/}/assistants?api-version=${AGENTS_API_VERSION}"
-    AGENTS_RESP=$(curl -sS -H "Authorization: Bearer $AGENTS_TOKEN" "$AGENTS_URL" 2>&1) || AGT_RC=$?
+    AGENTS_URL="${PROJ_ENDPOINT%/}/agents?api-version=${AGENTS_API_VERSION}"
+    AGENTS_RESP=$(curl -sS \
+      -H "Authorization: Bearer $AGENTS_TOKEN" \
+      -H "Foundry-Features: HostedAgents=V1Preview" \
+      "$AGENTS_URL" 2>&1) || AGT_RC=$?
     AGT_RC=${AGT_RC:-0}
     if (( AGT_RC != 0 )); then
       echo "[!] Agents control-plane call failed (rc=$AGT_RC)." >&2

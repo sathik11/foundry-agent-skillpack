@@ -11,7 +11,8 @@ Each entry: what the user did → what happened → what should happen → fix o
 > addressed in a single batch release — see the v0.27.0 changelog in
 > `foundry-agent-skillpack/apm.yml`. Status lines below are marked
 > "closed in v0.27.0"; the actual commit sha is recorded in git history.
-> Round 2 testing should begin **after** v0.27.0 is published.
+>
+> **Round 2 in progress.** FB-22 onward — see "Round 2 (post-v0.27.0)" section below.
 
 ---
 
@@ -1430,6 +1431,114 @@ All four belong in the same batch fix. FB-21 is the most insidious because `azd 
 - Update [code-deploy.md L159](foundry-agent-skillpack/.apm/skills/foundry-deploy/code-deploy.md#L159) note to call out that even on **current** extension versions, omitting `--deploy-mode code` silently scaffolds container path — not just an "old extension" bug.
 
 **Status:** closed in v0.27.0.
+
+---
+
+## Round 2 (post-v0.27.0)
+
+### FB-22 — `/assess-project` reports `AGENT_COUNT=0` for projects that DO have hosted agents (wrong API surface)
+
+**Date:** 2026-06-15
+**Reporter:** sathik (+ external reviewer)
+**Severity:** script bug (high — silently lies about discovery)
+
+**What the user saw.** Ran `/assess-project` against `rg-foundry-westus` where
+`azd up` had successfully deployed `hello-agent` (visible in the portal, reachable
+via `/api/projects/<proj>/agents/hello-agent/endpoint/...`). Discovery emitted
+`AGENT_COUNT=0` and the rolled-up report said "Hosted agents: zero".
+
+**What should happen.** Discovery should hit the Foundry hosted-agents collection
+(`GET {project_endpoint}/agents?api-version=v1`), not the OpenAI Assistants-compat
+shim (`GET {project_endpoint}/assistants?...`). The two are distinct collections
+with separate lifecycles — `/assistants` is ephemeral SDK-created objects, `/agents`
+is what `azd ai agent` / `agent.yaml` provisions. The script's own header comment at
+L55 says `accounts/projects/agents = v1 (control plane)` — implementation drifted
+from the comment.
+
+Empirically (verified live 2026-06-15 against `ai-project-foundry-westus`):
+- `/agents?api-version=v1` → `data: [{id: "hello-agent", name: "hello-agent", object, versions}]`, envelope `{object, data, first_id, last_id, has_more}` (OpenAI pagination shape — NOT ARM `.value[]`).
+- `/assistants?api-version=v1` → `data: []` (correctly empty; no Assistants-API objects exist in this project).
+
+**Owner / fix.** Edit [discover-project-topology.sh L505-L545](foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-project-topology.sh) — swap `/assistants` → `/agents`, add `Foundry-Features: HostedAgents=V1Preview` header for parity with [rest-api.md](foundry-agent-skillpack/.apm/skills/foundry-deploy/rest-api.md), preserve `.data[]` jq projection (reviewer's `.value[]` suggestion was wrong).
+
+**Status:** fix applied 2026-06-15, pending commit + v0.27.x bump.
+
+---
+
+### FB-23 — Capability-host PUT returns 403 on Cosmos/Search/Storage that LOOKS like RBAC but is actually `publicNetworkAccess` mismatch
+
+**Date:** 2026-06-15
+**Reporter:** sathik
+**Severity:** failure-mode docs gap (medium — wasted-investigation pattern)
+
+**What the user saw.** Capability-host provision fails with a 403 against the
+backing Cosmos / AI Search / Storage resource. The natural read is "project MI
+missing the data-plane role" — hours spent re-granting `Cosmos DB Built-in Data
+Contributor` / `Search Index Data Contributor` / `Storage Blob Data Owner` and
+re-running before realising the role assignments were already correct. Actual
+cause: Foundry account had `publicNetworkAccess=Enabled` but the backing
+resource had been provisioned with `publicNetworkAccess=Disabled` (Bicep drift),
+or vice-versa. Cross-class network attempt → platform returns the safer-of-two
+codes (`403`) because the AAD layer can't distinguish "principal denied" from
+"TLS endpoint unreachable from this network class".
+
+**What should happen.**
+1. Failure-modes skill should document this as a named mode with the three
+   `az ... show --query publicNetworkAccess` diagnose calls.
+2. `/assess-project` Step 7 today surfaces the network class for the **account**
+   only — it should ALSO cross-check the network posture of every backing
+   resource named in capability-host connections (Cosmos / AI Search / Storage)
+   and emit a ⚠ verdict when they don't match the account.
+
+**Owner / fix.**
+- Done in this round: added F-31 entry to [foundry-failure-modes/SKILL.md](foundry-agent-skillpack/.apm/skills/foundry-failure-modes/SKILL.md) — quick-triage row + full entry with diagnose / fix-public / fix-private branches.
+- Pending: extend [discover-project-topology.sh](foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-project-topology.sh) to emit `BACKING_<name>_PUBLIC_ACCESS=Enabled|Disabled` keys for each cap-host connection, and a new `verdict_network_class_consistency` in [discover-project-topology.py](foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/discover-project-topology.py) that flips ⚠ when any backing diverges from the account posture. Track as **TD-31**.
+
+**Status:** F-31 docs landed 2026-06-15 pending commit; verifier extension open (TD-31).
+
+---
+
+### FB-24 — No automated API-drift detection → bugs like FB-22 sit undiscovered until a consumer reports them
+
+**Date:** 2026-06-15
+**Reporter:** sathik
+**Severity:** process gap (high — every preview-API change is a latent bug)
+
+**What the user saw.** FB-22 sat undetected for weeks. The script's own
+reference doc ([rest-api.md](foundry-agent-skillpack/.apm/skills/foundry-deploy/rest-api.md))
+already documented the correct endpoint — the discovery script just drifted away
+from it silently. There's no mechanism today that exercises live Foundry surfaces
+on a cadence and flags shape changes. Pattern recurs: `enableVnextExperience`,
+preview header bumps, api-version moves all hit us the same way.
+
+**What should happen.** Nightly-ish drift-probe workflow (recommended cadence:
+every 72h via cron + `workflow_dispatch` for manual triggers) that:
+1. Logs in to a long-lived test Foundry project via OIDC federated identity
+   (no secrets in repo).
+2. Runs a small bash probe suite (`scripts/api-drift-probes.sh`) of `curl + jq`
+   shape extractions against the surfaces we depend on: `/agents`,
+   `/agents/{name}/versions`, `/capabilityHosts`, `/connections`,
+   `/code:download`, error envelopes for known 4xx codes.
+3. Diffs the projected shapes against a golden fixture at
+   `tests/fixtures/probes.golden.json`.
+4. On drift, opens an issue (`gh issue create`) AND a PR that updates the
+   golden so reviewers see the diff in a normal review surface.
+
+End-to-end provision tests (cap-host wiring, RBAC propagation, hosted-agent
+CREATE roundtrip) belong in a **separate, weekly** workflow with Bicep tear-up /
+tear-down — that's the only layer that catches behavioural drift like F-31.
+
+GitHub Actions is sufficient for both layers (ubuntu-latest + `az` + `curl` +
+`jq`); no container sandbox needed. Existing
+[apm-install-test.yml](.github/workflows/apm-install-test.yml) is the template.
+
+**Owner / fix.** New files:
+- `.github/workflows/api-drift-probe.yml` (cron + dispatch, OIDC login, runs probe suite, opens issue + PR on diff).
+- `scripts/api-drift-probes.sh` (8-ish probes covering the surfaces we've touched this month).
+- `tests/fixtures/probes.golden.json` (captured from `rg-foundry-westus` once on first run).
+- `.github/workflows/e2e-provision-weekly.yml` (separate, weekly, Bicep up + smoke + Bicep down). Track as **TD-32**.
+
+**Status:** open — proposed in chat 2026-06-15, awaiting go-ahead to scaffold.
 
 ---
 
