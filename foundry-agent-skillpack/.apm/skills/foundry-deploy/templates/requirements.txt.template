@@ -1,11 +1,12 @@
-# Refreshed Foundry hosted-agents preview (April 2026) — pin the alpha exactly.
+# Foundry hosted-agent container base — GENERATED from maintenance/versions.yaml.
+# Do NOT edit pins by hand: edit the registry, then run
+#   python maintenance/scripts/sync-versions.py --write
+# >>> versions:auto:container_agent_framework >>>
 agent-framework>=1.2.2
 agent-framework-foundry-hosting==1.0.0a260429
-azure-identity<1.26.0a0
-
-# Telemetry — auto-instruments + ships spans to App Insights using the
-# APPLICATIONINSIGHTS_CONNECTION_STRING that Foundry auto-injects.
+azure-identity>=1.19.0,<1.26.0a0
 azure-monitor-opentelemetry>=1.7
+# <<< versions:auto:container_agent_framework <<<
 
 # Optional — uncomment per declared capability. See runtime-dependencies.md.
 # azure-ai-contentsafety>=1.0.0   # Layer 2 guardrails (content_safety)

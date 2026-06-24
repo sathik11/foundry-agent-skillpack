@@ -1,0 +1,273 @@
+# maintenance/versions.yaml — SINGLE SOURCE OF TRUTH for every pinned dependency.
+#
+# MAINTAINER / CI-ONLY. Lives at repo root, NEVER under .apm/ (so it never ships via
+# `apm install`). The generator (maintenance/scripts/sync-versions.py) renders the shipped
+# pin files + docs FROM this file. CI (`sync-versions.py --check`) fails if any rendered
+# target drifts from here. The watcher (W2) diffs `pin`/`latest_seen` against live PyPI +
+# `az provider show` and re-stamps `last_verified`.
+#
+# Schema:
+#   meta.*                       provenance
+#   packages[].name              PyPI distribution name
+#   packages[].requirement       EXACT string rendered into requirements.txt / tables
+#   packages[].floor/ceiling     parsed bounds (watcher uses these)
+#   packages[].latest_seen       last value observed on PyPI (W0-T3 / watcher)
+#   packages[].deploy_path       all|container|code|caller|optional
+#   packages[].lockstep_group    bump together if set
+#   packages[].source_url        PyPI project page
+#   profiles.*                   ordered lists of package names → which file gets which pins
+#   api_versions[]               ARM api-version pins + latest GA observed
+
+meta:
+  baseline_tag: baseline-v0.27.0
+  skillpack_version: "0.27.0"
+  last_verified: "2026-06-24"
+  notes: >
+    Pins reflect the baseline-v0.27.0 anchor. Drift vs upstream (2026-06-24) is tracked as
+    open findings F-001..F-011 in maintenance/findings-backlog.md and must flow through the
+    validate-before-merge fix lifecycle — do NOT bump here without harness-green + approval.
+
+packages:
+  # ---- agent-framework container path (base set) ----
+  - name: agent-framework
+    requirement: "agent-framework>=1.2.2"
+    floor: "1.2.2"
+    ceiling: null
+    latest_seen: "1.9.0"
+    deploy_path: container
+    lockstep_group: agent-framework
+    source_url: https://pypi.org/project/agent-framework/
+    finding: F-001
+  - name: agent-framework-foundry-hosting
+    requirement: "agent-framework-foundry-hosting==1.0.0a260429"
+    floor: "1.0.0a260429"
+    ceiling: "1.0.0a260429"
+    latest_seen: "1.0.0a260618"
+    deploy_path: container
+    lockstep_group: agent-framework
+    source_url: https://pypi.org/project/agent-framework-foundry-hosting/
+    finding: F-002
+    notes: "Alpha exact pin — surface changed a260415->a260429; highest churn."
+
+  # ---- identity (shared by both container paths) ----
+  - name: azure-identity
+    requirement: "azure-identity>=1.19.0,<1.26.0a0"
+    floor: "1.19.0"
+    ceiling: "1.26.0a0"
+    latest_seen: "1.25.3"
+    deploy_path: all
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-identity/
+    finding: null
+    notes: "Ceiling avoids 1.26.0bX betas. Lift when 1.26.0 GAs."
+
+  # ---- telemetry (recommended in both containers) ----
+  - name: azure-monitor-opentelemetry
+    requirement: "azure-monitor-opentelemetry>=1.7"
+    floor: "1.7"
+    ceiling: null
+    latest_seen: "1.8.8"
+    deploy_path: container
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-monitor-opentelemetry/
+    finding: null
+
+  # ---- LangGraph BYO container path (base set) ----
+  - name: azure-ai-agentserver-responses
+    requirement: "azure-ai-agentserver-responses==1.0.0b5"
+    floor: "1.0.0b5"
+    ceiling: "1.0.0b5"
+    latest_seen: "1.0.0b7"
+    deploy_path: container
+    lockstep_group: agentserver
+    source_url: https://pypi.org/project/azure-ai-agentserver-responses/
+    finding: F-006
+  - name: azure-ai-agentserver-core
+    requirement: "azure-ai-agentserver-core==2.0.0b3"
+    floor: "2.0.0b3"
+    ceiling: "2.0.0b3"
+    latest_seen: "2.0.0b6"
+    deploy_path: container
+    lockstep_group: agentserver
+    source_url: https://pypi.org/project/azure-ai-agentserver-core/
+    finding: F-005
+  - name: langgraph
+    requirement: "langgraph==1.1.8"
+    floor: "1.1.8"
+    ceiling: "1.1.8"
+    latest_seen: "1.2.6"
+    deploy_path: container
+    lockstep_group: langgraph
+    source_url: https://pypi.org/project/langgraph/
+    finding: F-004
+  - name: langgraph-prebuilt
+    requirement: "langgraph-prebuilt==1.0.10"
+    floor: "1.0.10"
+    ceiling: "1.0.10"
+    latest_seen: "1.1.0"
+    deploy_path: container
+    lockstep_group: langgraph
+    source_url: https://pypi.org/project/langgraph-prebuilt/
+    finding: F-004
+  - name: langchain-core
+    requirement: "langchain-core==1.3.0"
+    floor: "1.3.0"
+    ceiling: "1.3.0"
+    latest_seen: "1.4.8"
+    deploy_path: container
+    lockstep_group: langgraph
+    source_url: https://pypi.org/project/langchain-core/
+    finding: F-004
+  - name: langchain-azure-ai
+    requirement: "langchain-azure-ai[opentelemetry]>=1.2.3"
+    floor: "1.2.3"
+    ceiling: null
+    latest_seen: "1.2.7"
+    deploy_path: container
+    lockstep_group: null
+    source_url: https://pypi.org/project/langchain-azure-ai/
+    finding: null
+
+  # ---- caller-side (laptop / CI; NOT in any container image) ----
+  - name: azure-ai-projects
+    requirement: "azure-ai-projects>=2.0.0,<3"
+    requirement_code_path: "azure-ai-projects>=2.2.0,<3"
+    floor: "2.0.0"
+    ceiling: "3"
+    latest_seen: "2.2.0"
+    deploy_path: caller
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-ai-projects/
+    finding: null
+    notes: "Code/zip deploy path needs >=2.2.0 + allow_preview=True."
+  - name: azure-ai-evaluation
+    requirement: "azure-ai-evaluation==1.16.6"
+    floor: "1.16.6"
+    ceiling: "1.16.6"
+    latest_seen: "1.17.0"
+    deploy_path: caller
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-ai-evaluation/
+    finding: F-003
+
+  # ---- optional per-capability (not in base requirements) ----
+  - name: azure-ai-contentsafety
+    requirement: "azure-ai-contentsafety>=1.0.0"
+    floor: "1.0.0"
+    ceiling: null
+    latest_seen: "1.0.0"
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-ai-contentsafety/
+    finding: null
+  - name: azure-search-documents
+    requirement: "azure-search-documents>=11.5"
+    floor: "11.5"
+    ceiling: null
+    latest_seen: "12.0.0"
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-search-documents/
+    finding: F-007
+    notes: "11->12 is a major; verify direct SearchClient usage before widening."
+  - name: httpx
+    requirement: "httpx>=0.27"
+    floor: "0.27"
+    ceiling: null
+    latest_seen: null
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/httpx/
+    finding: null
+  - name: opentelemetry-api
+    requirement: "opentelemetry-api>=1.27"
+    floor: "1.27"
+    ceiling: null
+    latest_seen: null
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/opentelemetry-api/
+    finding: null
+  - name: deltalake
+    requirement: "deltalake>=0.18"
+    floor: "0.18"
+    ceiling: null
+    latest_seen: null
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/deltalake/
+    finding: null
+  - name: azure-cosmos
+    requirement: "azure-cosmos>=4.7"
+    floor: "4.7"
+    ceiling: null
+    latest_seen: null
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/azure-cosmos/
+    finding: null
+  - name: redis
+    requirement: "redis>=5.0"
+    floor: "5.0"
+    ceiling: null
+    latest_seen: null
+    deploy_path: optional
+    lockstep_group: null
+    source_url: https://pypi.org/project/redis/
+    finding: null
+
+# Which packages render into which generated block. Order is preserved in output.
+profiles:
+  # foundry-deploy/templates/requirements.txt.template (base set, between markers)
+  container_agent_framework:
+    - agent-framework
+    - agent-framework-foundry-hosting
+    - azure-identity
+    - azure-monitor-opentelemetry
+  # foundry-deploy/templates/langgraph-byo/requirements.txt.template (base set, between markers)
+  container_langgraph:
+    - azure-ai-agentserver-responses
+    - azure-ai-agentserver-core
+    - azure-identity
+    - langgraph
+    - langgraph-prebuilt
+    - langchain-core
+    - langchain-azure-ai
+    - azure-monitor-opentelemetry
+  # sdk-surface.md "Pinned versions" table + README/SUPPORTED supported-SDK block
+  sdk_surface_table:
+    - agent-framework
+    - agent-framework-foundry-hosting
+    - azure-identity
+  # caller-side install line (runtime-dependencies.md / evals)
+  caller_side:
+    - azure-ai-projects
+    - azure-identity
+
+api_versions:
+  - resource_type: Microsoft.CognitiveServices/accounts
+    pin: "2026-03-01"
+    latest_ga_seen: "2026-05-01"
+    used_in: ["discover-target.sh", "check-identities.sh", "two-identities.md"]
+    finding: F-008
+  - resource_type: Microsoft.CognitiveServices (agents data-plane, preview)
+    pin: "2025-11-15-preview"
+    latest_ga_seen: null
+    used_in: ["code-deploy.md", "rest-api.md", "add-capability-host.sh"]
+    finding: null
+    notes: "Data-plane preview; verify against Learn code-deploy doc + probe, not az provider show."
+  - resource_type: Microsoft.Network/virtualNetworks
+    pin: "2025-05-01"
+    latest_ga_seen: "2025-09-01"
+    used_in: ["network walkers"]
+    finding: F-009
+  - resource_type: Microsoft.Network/azureFirewalls
+    pin: "2025-09-01"
+    latest_ga_seen: "2026-01-01"
+    used_in: ["deep-walk-firewall.sh"]
+    finding: F-010
+  - resource_type: Microsoft.Network (service-endpoint policies)
+    pin: "2025-07-01"
+    latest_ga_seen: null
+    used_in: ["check-service-endpoint-policy.sh"]
+    finding: F-011

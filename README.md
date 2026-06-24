@@ -84,6 +84,28 @@ After install you'll see:
 | Diagnose a failure | `/troubleshoot symptom="…"` |
 | Read-only drift reconciliation | `/audit-drift agent_path=agents/<name> agent_name=<name>` |
 
+## Supported SDK versions
+
+<!-- versions:auto:supported_sdk -->
+> **Supported SDK matrix** — verified 2026-06-24 against baseline `baseline-v0.27.0`. Generated from `maintenance/versions.yaml`; do not edit by hand.
+
+| Package | Supported version | Path |
+|---|---|---|
+| `agent-framework` | `>=1.2.2` | container |
+| `agent-framework-foundry-hosting` | `==1.0.0a260429` | container |
+| `azure-identity` | `>=1.19.0,<1.26.0a0` | all |
+| `azure-monitor-opentelemetry` | `>=1.7` | container |
+| `azure-ai-agentserver-responses` | `==1.0.0b5` | container |
+| `azure-ai-agentserver-core` | `==2.0.0b3` | container |
+| `langgraph` | `==1.1.8` | container |
+| `langgraph-prebuilt` | `==1.0.10` | container |
+| `langchain-core` | `==1.3.0` | container |
+| `langchain-azure-ai` | `[opentelemetry]>=1.2.3` | container |
+| `azure-ai-projects` | `>=2.0.0,<3` | caller |
+<!-- /versions:auto:supported_sdk -->
+
+The full matrix (packages + ARM api-versions) lives in [`maintenance/SUPPORTED.md`](./maintenance/SUPPORTED.md), generated from the single source of truth `maintenance/versions.yaml`. Pins are validated end-to-end against the tagged baseline before changes land.
+
 ## How we fit alongside Microsoft Agent Governance Toolkit (AGT)
 
 [Microsoft Agent Governance Toolkit](https://github.com/microsoft/agent-governance-toolkit) is the runtime governance layer for AI agents. This skillpack is the **deploy + lifecycle orchestration** layer for Foundry hosted agents. **They sit on different layers of the same stack and are intended to be used together** — AGT lists Azure AI Foundry as one of its supported deployment targets; we are the layer that gets Foundry agents deployed correctly before AGT wraps their tool calls at runtime.

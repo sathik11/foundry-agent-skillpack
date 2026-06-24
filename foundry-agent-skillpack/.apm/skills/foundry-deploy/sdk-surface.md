@@ -24,11 +24,14 @@ ResponsesHostServer(agent).run()
 
 ## Pinned versions
 
+<!-- Pins GENERATED from maintenance/versions.yaml — do not edit by hand. -->
+<!-- versions:auto:sdk_surface_table -->
 | Package | Pin |
 |---|---|
 | `agent-framework` | `>=1.2.2` |
-| `agent-framework-foundry-hosting` | `==1.0.0a260429` (alpha — exact pin) |
-| `azure-identity` | `<1.26.0a0` |
+| `agent-framework-foundry-hosting` | `==1.0.0a260429` |
+| `azure-identity` | `>=1.19.0,<1.26.0a0` |
+<!-- /versions:auto:sdk_surface_table -->
 
 Looser pins on the alpha package WILL break — the alpha API surface changed between `a260415` and `a260429`.
 

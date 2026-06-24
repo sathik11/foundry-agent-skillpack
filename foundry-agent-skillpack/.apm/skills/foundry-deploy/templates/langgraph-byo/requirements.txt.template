@@ -1,25 +1,17 @@
-# Pinned to the versions validated against the foundry-samples
-# bring-your-own/responses/langgraph-chat sample as of 2026-05-14.
-# Bump deliberately; track via the daily docs scan.
-
-# Foundry hosting adapters (Responses protocol)
+# Foundry LangGraph BYO container base — GENERATED from maintenance/versions.yaml.
+# Do NOT edit pins by hand: edit the registry, then run
+#   python maintenance/scripts/sync-versions.py --write
+# Validated against the foundry-samples bring-your-own/responses/langgraph-chat sample.
+# >>> versions:auto:container_langgraph >>>
 azure-ai-agentserver-responses==1.0.0b5
 azure-ai-agentserver-core==2.0.0b3
-
-# Identity (avoid 1.26.0bX betas)
 azure-identity>=1.19.0,<1.26.0a0
-
-# LangGraph + LangChain (latest validated)
 langgraph==1.1.8
 langgraph-prebuilt==1.0.10
 langchain-core==1.3.0
-
-# Azure OpenAI client + LangChain auto-OTel
 langchain-azure-ai[opentelemetry]>=1.2.3
-
-# Ship LangChain + non-LangChain spans to App Insights via auto-instrumentation.
-# Foundry auto-injects APPLICATIONINSIGHTS_CONNECTION_STRING.
 azure-monitor-opentelemetry>=1.7
+# <<< versions:auto:container_langgraph <<<
 
 # Optional — uncomment per declared capability. See runtime-dependencies.md.
 # azure-ai-contentsafety>=1.0.0   # Layer 2 guardrails (content_safety)

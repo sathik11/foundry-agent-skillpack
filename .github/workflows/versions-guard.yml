@@ -1,0 +1,53 @@
+name: versions-guard
+
+# Fails a PR if any shipped pin file drifts from the single source of truth
+# (maintenance/versions.yaml). Keeps the registry honest: pins may only change by
+# editing versions.yaml and running `sync-versions.py --write`.
+
+on:
+  pull_request:
+    paths:
+      - 'maintenance/versions.yaml'
+      - 'maintenance/scripts/sync-versions.py'
+      - 'foundry-agent-skillpack/.apm/skills/foundry-deploy/templates/**'
+      - 'foundry-agent-skillpack/.apm/skills/foundry-deploy/sdk-surface.md'
+      - 'README.md'
+      - 'maintenance/SUPPORTED.md'
+      - '.github/workflows/versions-guard.yml'
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pyyaml
+        run: pip install pyyaml
+      - name: Verify shipped pins match maintenance/versions.yaml
+        run: |
+          echo "## Versions registry drift check" >> "$GITHUB_STEP_SUMMARY"
+          if python maintenance/scripts/sync-versions.py --check; then
+            echo "✅ All managed pin blocks match \`maintenance/versions.yaml\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "❌ A shipped pin file drifted from \`maintenance/versions.yaml\`."
+              echo ""
+              echo "Fix: edit \`maintenance/versions.yaml\`, then run"
+              echo '`python maintenance/scripts/sync-versions.py --write` and commit.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Show current registry vs upstream (informational)
+        if: always()
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python maintenance/scripts/sync-versions.py --report >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
