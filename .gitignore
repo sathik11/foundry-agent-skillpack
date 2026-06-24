@@ -45,3 +45,7 @@ assessment/
 
 # Watcher per-run output (uploaded as a CI artifact; not source)
 maintenance/watch/drift-report.json
+
+# E2E baseline secret config
+infra/baseline.env
+.azure/

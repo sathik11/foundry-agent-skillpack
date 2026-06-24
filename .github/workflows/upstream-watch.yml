@@ -32,6 +32,7 @@ jobs:
   watch:
     runs-on: ubuntu-latest
     env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
@@ -41,10 +42,16 @@ jobs:
           python-version: '3.12'
       - run: pip install pyyaml packaging
 
-      # OIDC login so the api-version poll (`az provider show`) works. Read-only.
-      # Skipped automatically until the AZURE_* secrets are configured (W5-T3).
-      - name: Azure login (OIDC)
-        if: ${{ env.AZURE_CLIENT_ID != '' }}
+      # Login so the api-version poll (`az provider show`) works. Read-only use here.
+      # Prefer the SP-secret style (AZURE_CREDENTIALS) you configure in the portal; fall back
+      # to OIDC client-id if that's how you wired it. Auto-skips until one is set.
+      - name: Azure login (service principal secret)
+        if: ${{ env.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure login (OIDC fallback)
+        if: ${{ env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_ID != '' }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
