@@ -1,0 +1,67 @@
+# maintenance/watch/doc-sources.yaml — machine-readable list of canonical Learn doc
+# topics the watcher hashes + diffs (the human view is watch-inventory.md §4).
+# owner = the skill that must change if the doc content moves.
+docs:
+  - id: hosted-agents
+    url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents
+    owner: foundry-deploy
+  - id: deploy-hosted-agent-code
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/deploy-hosted-agent-code
+    owner: foundry-deploy
+  - id: configure-agent
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/configure-agent
+    owner: foundry-deploy
+  - id: capability-hosts
+    url: https://learn.microsoft.com/azure/ai-foundry/agents/concepts/capability-hosts
+    owner: foundry-deploy
+  - id: hosted-agent-permissions
+    url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agent-permissions
+    owner: foundry-identity
+  - id: agent-applications
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/agent-applications
+    owner: foundry-teams-workiq
+  - id: publish-copilot
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/publish-copilot
+    owner: foundry-teams-workiq
+  - id: rbac-foundry
+    url: https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry
+    owner: foundry-roles
+  - id: configure-private-link
+    url: https://learn.microsoft.com/azure/foundry/how-to/configure-private-link
+    owner: foundry-prod-readiness
+  - id: managed-virtual-network
+    url: https://learn.microsoft.com/azure/foundry/how-to/managed-virtual-network
+    owner: foundry-prod-readiness
+  - id: agents-virtual-networks
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks
+    owner: foundry-prod-readiness
+  - id: run-ai-red-teaming-cloud
+    url: https://learn.microsoft.com/azure/foundry/how-to/develop/run-ai-red-teaming-cloud
+    owner: foundry-evals
+  - id: custom-evaluators
+    url: https://learn.microsoft.com/azure/foundry/concepts/evaluation-evaluators/custom-evaluators
+    owner: foundry-evals
+  - id: what-is-foundry-iq
+    url: https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq
+    owner: foundry-knowledge
+  - id: foundry-iq-connect
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/foundry-iq-connect
+    owner: foundry-knowledge
+  - id: tools-ai-search
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/ai-search
+    owner: foundry-knowledge
+  - id: tools-file-search
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/file-search
+    owner: foundry-knowledge
+  - id: tools-governance
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/governance
+    owner: foundry-guardrails
+  - id: ai-gateway
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
+    owner: foundry-deploy
+  - id: manage-hosted-sessions
+    url: https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-sessions
+    owner: foundry-deploy
+  - id: purview-ai
+    url: https://learn.microsoft.com/purview/ai-microsoft-purview
+    owner: foundry-purview

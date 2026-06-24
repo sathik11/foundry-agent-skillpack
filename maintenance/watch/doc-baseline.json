@@ -1,0 +1,23 @@
+{
+  "agent-applications": "6e6cd3865cfbad191a84ea9f3b059ffc21d9fffba8c9339539ce5a68cdad2a8a",
+  "agents-virtual-networks": "50e0fa7eef17afed2a67c0e87982b4a2a42448d2216925e9e6ae65a6f5ff1aaf",
+  "ai-gateway": "0cea688ff7a8be1a0a5348a57ad5b9455a85bd6380fdbc876232bc78ea6b370a",
+  "capability-hosts": "3fe67051ca3540b061a6616627f9721f886de18d864c8e66ce162139738664f4",
+  "configure-agent": "5d06904c90d04e180227f34490a31791320f9668239e621f81f01d15046f7c9b",
+  "configure-private-link": "5cf791b33116b7a7fab8b4ccf8663a96c70d672f81aac09eaf7c8a83398c927d",
+  "custom-evaluators": "f61fb5d80ab2832874fb8b606df18aee6ca32b0e63486c078f69d84e5cb896ed",
+  "deploy-hosted-agent-code": "1f80c964f95430a0bf4953f7cbec5092ce5d220922a2140bd228322551935da1",
+  "foundry-iq-connect": "c22eebe47973c04ede75f63a7ef855ac2870de725d86d440d55343b39870e454",
+  "hosted-agent-permissions": "1015c93c6d4d2d19ea08993eaa64e583fbd17f529caf42a874236e8c947aaac7",
+  "hosted-agents": "744598f8e6da875d93db491e6605dbd677b734637ddd38b086fc509d6ac595dc",
+  "manage-hosted-sessions": "048687056af2ecbdb2a1e4ea0727706c1394075462926e39683eb76a61fab130",
+  "managed-virtual-network": "2c25331245e2db93eee84ec1ebc04ab4fac16f8412cc89fe32331596077f2d0d",
+  "publish-copilot": "e45cba3fd0cd279a05b9013de7c0b267e719c6ba53ad0ee86f9a73062c82f5c8",
+  "purview-ai": "cef6a559f7d4881e2be4a4f06acbc335d76d686212748887701ed946ce3e1dc6",
+  "rbac-foundry": "ba059292464e71c69ab9939972fcc4a5eb8315ac30e004e4af9827cce66a8670",
+  "run-ai-red-teaming-cloud": "9e9e2e453ccc0dd9e9130dd29f3b39e8a027c37a31034b4d21a41a616bf9d6da",
+  "tools-ai-search": "6af05a840c45d2b2bac2dfc2393f38fba3cf71c55cfcf865c30609134819442d",
+  "tools-file-search": "f17826cd7a8c0a06f4c96986ea9093afacc22e1c8361b5523af1a11d02552234",
+  "tools-governance": "aa7b1fc3c592d795cba6f1ab6edad519decdf3f3f0e7066e24ee6739e0605139",
+  "what-is-foundry-iq": "84771e4ea0597db3ef73f1156d54527f05da34614fd5688318b3835587c2fc34"
+}

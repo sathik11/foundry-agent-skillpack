@@ -1,0 +1,79 @@
+name: upstream-watch
+
+# Twice-weekly watcher: polls PyPI + ARM api-versions + Learn doc topics and emits a
+# classified drift report. REPORT-ONLY by default (no PRs) per rollout W7-T3 — the PR/apply
+# path is gated behind the `mode=apply` dispatch input and is added incrementally (W2-T4).
+
+on:
+  schedule:
+    - cron: '17 6 * * 2'   # Tue 06:17 UTC
+    - cron: '17 6 * * 5'   # Fri 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'report-only (default) or apply (open/update rolling PR — not yet enabled)'
+        type: choice
+        options: [report-only, apply]
+        default: report-only
+      update_doc_baseline:
+        description: 'Record current doc hashes as the new baseline'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write   # for azure/login OIDC (api-version poll); read-only Azure access
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml packaging
+
+      # OIDC login so the api-version poll (`az provider show`) works. Read-only.
+      # Skipped automatically until the AZURE_* secrets are configured (W5-T3).
+      - name: Azure login (OIDC)
+        if: ${{ env.AZURE_CLIENT_ID != '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Collect drift
+        id: collect
+        run: |
+          AZFLAG=""
+          if ! az account show >/dev/null 2>&1; then AZFLAG="--no-az"; echo "::warning::no Azure login — api-version poll skipped"; fi
+          BASEFLAG=""
+          if [ "${{ inputs.update_doc_baseline }}" = "true" ]; then BASEFLAG="--update-doc-baseline"; fi
+          python maintenance/watch/collect-drift.py $AZFLAG $BASEFLAG \
+            --out maintenance/watch/drift-report.json \
+            --summary drift-summary.md
+          cat drift-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report
+          path: |
+            maintenance/watch/drift-report.json
+            drift-summary.md
+
+      # ---- report-only stops here. The apply path (W2-T4) is intentionally not wired yet. ----
+      - name: Apply mode (disabled in report-only rollout)
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          echo "::notice::apply mode requested but the rolling-PR path lands in W2-T4 after the"
+          echo "report-only tuning cycle (rollout W7-T3). No PR opened."
