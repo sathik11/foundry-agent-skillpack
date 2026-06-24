@@ -21,44 +21,36 @@ plus permission to create the **role-assignment resources the bicep itself conta
 Foundry account automatically. So you do **not** assign `Foundry User` by hand — but note the
 template *creates a role assignment*, which is why the SP needs RBAC-write to deploy at all (below).
 
-## Roles to assign (the minimal, control-preserving set)
+## Roles to assign (headless-safe, RG-scoped)
 
-Scope everything to the **dedicated E2E resource group** unless noted. Two equivalent options:
+You pre-created the dedicated RG and we deploy **RG-scoped** (`baseline.sh DEPLOY_SCOPE=group`,
+which is the default), so **every grant below is at the RG — nothing at subscription scope.**
 
-### Option A — simplest (recommended): `Owner` on the dedicated RG
+**A headless service principal should NOT be `Owner`.** `Owner` can grant any role (including
+`Owner`/`User Access Administrator`) — an escalation surface you don't want on an unattended
+credential. Use this least-privilege set instead:
+
 | Role | Scope | Why |
 |---|---|---|
-| **Owner** | dedicated E2E RG | Subsumes Contributor (provision baseline, `azd up`, ACR push, networking, model deployment) **and** role-assignment write (the bicep + Phase-2 per-agent grants both create `Microsoft.Authorization/roleAssignments`). |
-| **Foundry Project Manager** | E2E RG (cascades to the project) | `azd up` writes **environment variables on the agent version** — a project-config write that `Foundry User` (auto-granted) does **not** cover. Matrix Phase 1. |
-| **Cognitive Services OpenAI User** | **driver-model RG** (cross-RG) | The test *driver brain* (your GPT-5.4 deployment in a separate RG, W3) — lets the SP call that model. Not in the E2E RG. |
+| **Contributor** | dedicated E2E RG | provision the baseline, `azd up`, model deployment, ACR push, networking |
+| **Role Based Access Control Administrator** | dedicated E2E RG | create the role-assignments the bicep contains + the Phase-2 per-agent grants. **Safer than Owner/UAA for headless:** it cannot grant `Owner` and supports a constraining condition. |
+| **Foundry Project Manager** | dedicated E2E RG (cascades to the project) | `azd up` writes **environment variables on the agent version** — a project-config write `Foundry User` (auto-granted by the bicep) does not cover |
+| **Cognitive Services OpenAI User** | **driver-model RG** (cross-RG) | lets the SP call your GPT-5.4 driver brain (separate RG, W3) |
 
-### Option B — least-privilege (more roles, no `Owner`)
-Use this if org policy forbids `Owner` for automation:
-| Role | Scope | Replaces |
-|---|---|---|
-| **Contributor** | E2E RG | control-plane provisioning + `azd up` + model deployment + ACR push |
-| **Role Based Access Control Administrator** | E2E RG | creating the bicep's role assignments + Phase-2 per-agent grants (more constrained than User Access Administrator; can't grant Owner) |
-| **Foundry Project Manager** | E2E RG | project-config writes (env vars on version) |
-| **Cognitive Services OpenAI User** | driver-model RG | driver brain access |
+> Optionally scope the **RBAC Administrator** assignment with a condition that restricts which
+> role-definition IDs it may grant (to exactly the Phase-2 set: `Foundry User`, `Cognitive Services
+> OpenAI User`, `Cognitive Services User`, `Search Index Data Reader`, `Storage Blob Data Reader`,
+> `Cosmos DB Built-in Data Contributor`). Tightest posture; optional.
 
-> `Azure AI Developer` is **NOT** sufficient for hosted agents (MS Learn) — do not use it. See the
-> matrix's rename note: `Foundry User`/`Foundry Project Manager` are the current names (role-def IDs
-> unchanged through the 2026 rename).
+`Azure AI Developer` is **NOT** sufficient for hosted agents (MS Learn). Current role names are
+`Foundry User` / `Foundry Project Manager` (role-def IDs unchanged through the 2026 rename).
 
-## The one subscription-scope decision (deployment scope)
+## Deployment scope — resolved
 
-`infra/main.bicep` is **subscription-scoped** and *creates the RG itself* (`az deployment sub create`).
-That means the SP needs a role at **subscription** scope just to run the deployment — broader than RG
-isolation. Two ways to keep blast radius at the RG:
-
-1. **Pre-create the RG yourself** (you want control anyway), then we deploy **RG-scoped**. Ask me to
-   add the group-scoped entry (`baseline.sh DEPLOY_SCOPE=group`) and you only ever grant at RG scope.
-   **Recommended.**
-2. **Accept a subscription-scoped grant** (Owner/Contributor+RBAC-Admin at the subscription) and let
-   the deployment create the RG. Simplest to run, broadest permission.
-
-Until you decide, `baseline.sh provision` uses option 2 (sub-scoped). Tell me to wire option 1 and
-I'll add the RG-scoped template path.
+You pre-created the RG, so we use **RG-scoped deployment** (`main-group.bicep`, the RG-scoped sibling
+of `main.bicep`). `baseline.sh` defaults to `DEPLOY_SCOPE=group` and **fails fast** if the RG is
+missing. The SP therefore needs **no subscription-scoped role**. (`DEPLOY_SCOPE=sub` + `main.bicep`
+remains available for the create-the-RG-too path, which would require a subscription grant.)
 
 ## Verify (read-only) after you assign
 
@@ -72,8 +64,8 @@ az role assignment list --assignee "$SP_OID" \
 az role assignment list --assignee "$SP_OID" \
   --scope /subscriptions/<sub>/resourceGroups/<driver-model-rg> -o table
 ```
-Expect (Option A): `Owner`, `Foundry Project Manager` on the E2E RG; `Cognitive Services OpenAI User`
-on the driver-model RG.
+Expect: `Contributor`, `Role Based Access Control Administrator`, `Foundry Project Manager` on the
+E2E RG; `Cognitive Services OpenAI User` on the driver-model RG.
 
 ## Wiring the SP into GitHub (you choose the auth style)
 

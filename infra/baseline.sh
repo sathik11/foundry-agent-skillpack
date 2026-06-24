@@ -22,12 +22,20 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BICEP="$HERE/main.bicep"
+BICEP_GROUP="$HERE/main-group.bicep"
 [ -f "$HERE/baseline.env" ] && source "$HERE/baseline.env"
 
 : "${AZURE_SUBSCRIPTION_ID:?set AZURE_SUBSCRIPTION_ID}"
 : "${AZURE_LOCATION:?set AZURE_LOCATION (e.g. eastus2)}"
 : "${AZURE_ENV_NAME:?set AZURE_ENV_NAME (e.g. skillpack-e2e)}"
 : "${AZURE_RESOURCE_GROUP:?set AZURE_RESOURCE_GROUP (dedicated RG)}"
+
+# Deployment scope:
+#   group (default) — RG-scoped deploy into a PRE-CREATED RG (main-group.bicep). The CI SP
+#                     then needs only RG-scoped roles (no subscription grant). Recommended.
+#   sub             — subscription-scoped deploy (main.bicep) that creates the RG itself;
+#                     requires a subscription-scoped role on the SP.
+DEPLOY_SCOPE="${DEPLOY_SCOPE:-group}"
 
 # Standing-baseline toggles (overridable via baseline.env / env).
 ENABLE_MONITORING="${ENABLE_MONITORING:-true}"
@@ -74,30 +82,43 @@ principal_type() {
 do_provision() {
   require_az
   local pid ptype; pid="$(resolve_principal)"; ptype="$(principal_type)"
-  log "provisioning standing baseline → RG=$AZURE_RESOURCE_GROUP loc=$AZURE_LOCATION apim=$ENABLE_APIM($APIM_SKU_NAME)"
+  log "provisioning standing baseline → RG=$AZURE_RESOURCE_GROUP loc=$AZURE_LOCATION scope=$DEPLOY_SCOPE apim=$ENABLE_APIM($APIM_SKU_NAME)"
   log "NOTE: APIM Developer SKU cold-provision is ~45 min — expected, not a hang."
-  az deployment sub create \
-    --name "$DEPLOYMENT_NAME" \
-    --location "$AZURE_LOCATION" \
-    --template-file "$BICEP" \
-    --parameters \
-      environmentName="$AZURE_ENV_NAME" \
-      resourceGroupName="$AZURE_RESOURCE_GROUP" \
-      location="$AZURE_LOCATION" \
-      principalId="$pid" \
-      principalType="$ptype" \
-      enableMonitoring="$ENABLE_MONITORING" \
-      enableHostedAgents="$ENABLE_HOSTED_AGENTS" \
-      enableCapabilityHost=true \
-      enableCosmos="$ENABLE_COSMOS" \
-      enableStorage="$ENABLE_STORAGE" \
-      enableSearch="$ENABLE_SEARCH" \
-      enableApim="$ENABLE_APIM" \
-      apimSkuName="$APIM_SKU_NAME" \
-      apimPublisherEmail="$APIM_PUBLISHER_EMAIL" \
-      apimPublisherName="$APIM_PUBLISHER_NAME" \
-      aiProjectDeploymentsJson="$AI_PROJECT_DEPLOYMENTS" \
-    --output none
+  local common_params=(
+      environmentName="$AZURE_ENV_NAME"
+      resourceGroupName="$AZURE_RESOURCE_GROUP"
+      location="$AZURE_LOCATION"
+      principalId="$pid"
+      principalType="$ptype"
+      enableMonitoring="$ENABLE_MONITORING"
+      enableHostedAgents="$ENABLE_HOSTED_AGENTS"
+      enableCapabilityHost=true
+      enableCosmos="$ENABLE_COSMOS"
+      enableStorage="$ENABLE_STORAGE"
+      enableSearch="$ENABLE_SEARCH"
+      enableApim="$ENABLE_APIM"
+      apimSkuName="$APIM_SKU_NAME"
+      apimPublisherEmail="$APIM_PUBLISHER_EMAIL"
+      apimPublisherName="$APIM_PUBLISHER_NAME"
+      aiProjectDeploymentsJson="$AI_PROJECT_DEPLOYMENTS"
+  )
+  if [ "$DEPLOY_SCOPE" = "group" ]; then
+    az group show -n "$AZURE_RESOURCE_GROUP" >/dev/null 2>&1 \
+      || die "RG '$AZURE_RESOURCE_GROUP' not found. DEPLOY_SCOPE=group expects a PRE-CREATED RG (see infra/RBAC.md). Create it, or set DEPLOY_SCOPE=sub."
+    az deployment group create \
+      --resource-group "$AZURE_RESOURCE_GROUP" \
+      --name "$DEPLOYMENT_NAME" \
+      --template-file "$BICEP_GROUP" \
+      --parameters "${common_params[@]}" \
+      --output none
+  else
+    az deployment sub create \
+      --name "$DEPLOYMENT_NAME" \
+      --location "$AZURE_LOCATION" \
+      --template-file "$BICEP" \
+      --parameters "${common_params[@]}" \
+      --output none
+  fi
   log "provision complete."
   do_outputs
 }
@@ -117,8 +138,14 @@ do_ensure() {
 
 do_outputs() {
   require_az
-  local json; json="$(az deployment sub show -n "$DEPLOYMENT_NAME" \
-    --query "properties.outputs" -o json 2>/dev/null || echo '{}')"
+  local json
+  if [ "$DEPLOY_SCOPE" = "group" ]; then
+    json="$(az deployment group show -g "$AZURE_RESOURCE_GROUP" -n "$DEPLOYMENT_NAME" \
+      --query "properties.outputs" -o json 2>/dev/null || echo '{}')"
+  else
+    json="$(az deployment sub show -n "$DEPLOYMENT_NAME" \
+      --query "properties.outputs" -o json 2>/dev/null || echo '{}')"
+  fi
   if [ "${1:-}" = "--json" ]; then echo "$json"; return; fi
   # KEY=VALUE for sourcing into the harness env.
   echo "$json" | python3 -c '
