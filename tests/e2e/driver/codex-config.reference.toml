@@ -1,0 +1,13 @@
+# Reference codex config for the E2E driver (no secrets — the endpoint is not sensitive).
+# run_driver.py writes/uses ~/.codex/config.toml with these contents. The API key is the
+# Azure AD access token (env FOUNDRY_API_KEY), refreshed per run by token.sh.
+#
+# Models deployed on this Foundry account: gpt-5.4 (default) and gpt-5.3-codex.
+model = "gpt-5.4"
+model_provider = "foundry"
+
+[model_providers.foundry]
+name = "Azure AI Foundry (skillpack E2E driver)"
+base_url = "https://ai-account-o57kln2gc73hk.services.ai.azure.com/openai/v1"
+wire_api = "responses"
+env_key = "FOUNDRY_API_KEY"

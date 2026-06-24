@@ -53,3 +53,6 @@ infra/baseline.env
 # Local SP creds for E2E (NEVER commit)
 infra/.e2e-creds.env
 infra/*.creds
+
+# E2E run artifacts (transcripts/verdicts) — not source
+tests/e2e/artifacts/
