@@ -102,7 +102,11 @@ def main() -> int:
 
     cmd = backend.argv(prompt, args.workdir, model, full_access)
     started = time.time()
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    # stdin=DEVNULL: the driver is always non-interactive. Without this, a detached/nohup launch
+    # leaves the child with an invalid inherited stdin → opencode fails with "EBADF: bad file
+    # descriptor, read" before emitting any event.
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
     q: "queue.Queue" = queue.Queue()
     threading.Thread(target=reader_thread, args=(proc.stdout, q), daemon=True).start()
 

@@ -56,3 +56,7 @@ infra/*.creds
 
 # E2E run artifacts (transcripts/verdicts) — not source
 tests/e2e/artifacts/
+infra/.baseline-outputs.env
+
+# E2E test agents scaffolded by smoke runs
+agents/
