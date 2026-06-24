@@ -67,6 +67,37 @@ Per-run marginal cost (model calls + transient compute) is small: **~$1–5 per 
    a weekly cadence instead of 24/7 — trades time for money. `baseline.sh provision`/`destroy-all`
    make this a one-command switch.
 
+## APIM: on-demand, not standing (decision)
+
+The standing baseline runs with **`ENABLE_APIM=false`**. APIM only serves **scenario 05 (APIM-fronted
+MCP)**. When that scenario is scheduled, bring APIM up incrementally and tear it down after:
+
+```bash
+ENABLE_APIM=true  infra/baseline.sh provision      # adds just APIM (~45 min, Developer SKU)
+# ...run scenario 05...
+# leave it for the week, or remove only APIM when done (manual: az resource delete the APIM instance)
+```
+
+This keeps ~$50/mo + the 45-min wait off the 24/7 baseline for a single-scenario dependency.
+
+## Resource discovery: tags, not names (decision)
+
+The vendored modules name globally-unique resources with a `uniqueString(...)` suffix (required so
+ACR/APIM names don't collide across tenants). Rather than fight that with date-stamped names — which
+is an **anti-pattern**: a date in a resource *name* makes a later re-provision create NEW resources
+and orphan the old ones, breaking the standing-baseline model and leaking cost — every resource is
+**tagged**:
+
+| Tag | Value | Use |
+|---|---|---|
+| `createdOn` | `ddMMyyyy` (deploy date, via `utcNow()`) | know when it was created |
+| `purpose` | `skillpack-e2e-baseline` | `az resource list --tag purpose=skillpack-e2e-baseline -o table` |
+| `managedBy` | `infra/baseline.sh` | distinguish from hand-created resources |
+| `azd-env-name` | env name | azd grouping |
+| `e2e-ephemeral` | `true` (agent layer only) | the cleanup sweep + `teardown-agents` target ONLY these |
+
+So the human-friendly map is the tag set, and re-provisioning stays idempotent.
+
 ## Measure precisely (turns the estimates above into real numbers)
 
 `baseline.sh provision` wraps the deploy; to capture real timings, run it timed and record the ARM

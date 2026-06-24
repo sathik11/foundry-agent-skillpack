@@ -49,3 +49,7 @@ maintenance/watch/drift-report.json
 # E2E baseline secret config
 infra/baseline.env
 .azure/
+
+# Local SP creds for E2E (NEVER commit)
+infra/.e2e-creds.env
+infra/*.creds

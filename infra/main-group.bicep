@@ -145,6 +145,12 @@ param apimPublisherName string = 'AI Foundry Admin'
 @allowed(['Developer', 'Consumption', 'Basic', 'Standard', 'Premium'])
 param apimSkuName string = 'Developer'
 
+@description('Creation date stamp (ddMMyyyy) applied as a tag to EVERY resource. Defaults to deploy time. Intentionally a TAG, not part of resource names — a date in the name would break idempotent re-provisioning (it would create new resources and orphan the old ones).')
+param createdOn string = utcNow('ddMMyyyy')
+
+@description('Purpose tag for human-friendly discovery: az resource list --tag purpose=<value>.')
+param baselinePurpose string = 'skillpack-e2e-baseline'
+
 // Tags that should be applied to all resources.
 // 
 // Note that 'azd-service-name' tags should be applied separately to service host resources.
@@ -152,6 +158,9 @@ param apimSkuName string = 'Developer'
 //   tags: union(tags, { 'azd-service-name': <service name in azure.yaml> })
 var tags = {
   'azd-env-name': environmentName
+  createdOn: createdOn
+  purpose: baselinePurpose
+  managedBy: 'infra/baseline.sh'
 }
 
 // Build dependent resources array conditionally
