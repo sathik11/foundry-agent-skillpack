@@ -66,6 +66,13 @@ def check_assertions(scenario: dict, workdir: Path) -> list[dict]:
         if kind == "path_exists":
             ok = (workdir / a["path"]).exists()
             detail = a["path"]
+        elif kind == "file_contains":
+            f = workdir / a["path"]
+            if not f.exists():
+                detail = f"{a['path']} missing"
+            else:
+                ok = a["contains"] in f.read_text()
+                detail = f"{a['path']} contains {a['contains']!r}: {ok}"
         elif kind == "agent_status":
             if status is None:
                 detail = "agent-status.json not found"
@@ -119,6 +126,11 @@ def main() -> int:
         ]
         if args.model:
             cmd += ["--model", args.model]
+        elif scenario.get("driver", {}).get("model"):
+            cmd += ["--model", scenario["driver"]["model"]]
+        agent = scenario.get("driver", {}).get("agent")
+        if agent:
+            cmd += ["--agent", agent]
         print(f"[harness] running driver for scenario '{scenario['id']}' (run {run_id})…")
         subprocess.run(cmd)
         vf = art / "verdict.json"

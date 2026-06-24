@@ -39,3 +39,34 @@ reliably pick up the lifecycle. Also: the scenario prompt should pass the concre
 - Headless `/plan-agent` Step 0a/0b are interactive (picklists, model-deploy consent). The journey
   prompt must supply target + "use existing gpt-4o-mini; do not deploy a model" up front (already
   partially worded; tighten with the exact project endpoint/name).
+
+## Run greenfield-live-2 (2026-06-24) — STALLED (watchdog fired correctly)
+
+Drove `--agent foundry-engineer` with concrete target facts on the scaffold→preflight slice.
+
+| ID | Finding | Severity | Status |
+|---|---|---|---|
+| F-B | foundry-engineer agent now behaves correctly — loaded foundry-deploy skill, read templates/scripts (no aimless searching). | — | **RESOLVED** by --agent + concrete facts. |
+| F-C | After ~29 events of exploration the run went silent for 600s → watchdog killed it (`stalled`, 836s). gpt-5.4 is a REASONING model: slow/overkill for a coding-scaffolding task, emitting no opencode events during a long reasoning turn. The guardrail WORKED (caught the stall). | high | **FIX:** switch coding scenarios to **gpt-5.3-codex** (the coding-optimized deployment) instead of gpt-5.4; it should act (write files) far faster. Optionally cap reasoning via `--variant minimal`. |
+
+### Takeaways
+- The anti-stall watchdog is validated on a real stall (not just synthetic).
+- Model choice matters: use **gpt-5.3-codex** for scaffold/deploy (coding) scenarios; reserve gpt-5.4
+  for reasoning-heavy judgement. The driver/backends already support per-scenario model.
+
+## Run greenfield-live-3 (2026-06-24) — ✅ PASS (first green E2E smoke)
+
+Same scenario, model switched to **gpt-5.3-codex**. Driver `completed` in **108.7s** (62 events,
+2 commands). Scaffolded Dockerfile/agent.yaml/main.py/requirements.txt + a correct
+agent-capabilities.yaml (schema_version 1, hosted, container, target block populated from the
+confirmed facts, model gpt-4o-mini, guardrails middleware), then ran prepare-deploy.sh.
+
+**Harness: OVERALL PASS — 5/5 assertions.** End-to-end pipeline proven:
+provisioned baseline → opencode(foundry-engineer, gpt-5.3-codex) → guarded driver → scaffold →
+assertions. F-C confirmed fixed by model choice (codex model is ~8x faster + actually acts).
+
+### Standing decisions from this loop
+- Default driver model for CODING/scaffold/deploy scenarios = **gpt-5.3-codex**.
+- Reserve gpt-5.4 (reasoning) for judgement-heavy scenarios.
+- Next milestones: extend this scenario to azd up + /verify-agent (real deploy), then add the
+  brownfield + knowledge scenarios.

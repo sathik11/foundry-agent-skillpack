@@ -74,6 +74,7 @@ def main() -> int:
     ap.add_argument("--artifacts", required=True)
     ap.add_argument("--backend", default="opencode", choices=["opencode", "codex"])
     ap.add_argument("--model", default=None, help="provider/model (defaults per backend)")
+    ap.add_argument("--agent", default=None, help="backend agent persona (opencode --agent)")
     ap.add_argument("--wall-clock", type=int, default=2400, help="total budget seconds (default 40m)")
     ap.add_argument("--no-progress", type=int, default=1200,
                     help="kill if no event for this long (default 20m; > longest single Azure op on a WARM baseline)")
@@ -100,7 +101,7 @@ def main() -> int:
     art.mkdir(parents=True, exist_ok=True)
     transcript = (art / "transcript.jsonl").open("w")
 
-    cmd = backend.argv(prompt, args.workdir, model, full_access)
+    cmd = backend.argv(prompt, args.workdir, model, full_access, agent=args.agent)
     started = time.time()
     # stdin=DEVNULL: the driver is always non-interactive. Without this, a detached/nohup launch
     # leaves the child with an invalid inherited stdin → opencode fails with "EBADF: bad file

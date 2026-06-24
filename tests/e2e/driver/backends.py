@@ -20,7 +20,7 @@ import shutil
 class Backend:
     name = "base"
 
-    def argv(self, prompt: str, workdir: str, model: str, full_access: bool) -> list[str]:
+    def argv(self, prompt: str, workdir: str, model: str, full_access: bool, agent: str | None = None) -> list[str]:
         raise NotImplementedError
 
     def parse(self, ev: dict) -> tuple[str | None, str]:
@@ -32,10 +32,12 @@ class OpenCodeBackend(Backend):
     name = "opencode"
     default_model = "foundry/gpt-5.4"
 
-    def argv(self, prompt, workdir, model, full_access):
-        # --format json → raw JSONL events; --dir → workdir. opencode runs tools by default.
-        return ["opencode", "run", "--format", "json", "--dir", workdir,
-                "--model", model, prompt]
+    def argv(self, prompt, workdir, model, full_access, agent=None):
+        argv = ["opencode", "run", "--format", "json", "--dir", workdir, "--model", model]
+        if agent:
+            argv += ["--agent", agent]
+        argv += [prompt]
+        return argv
 
     def parse(self, ev):
         t = ev.get("type")
@@ -56,7 +58,7 @@ class CodexBackend(Backend):
     name = "codex"
     default_model = "gpt-5.4"
 
-    def argv(self, prompt, workdir, model, full_access):
+    def argv(self, prompt, workdir, model, full_access, agent=None):
         argv = ["codex", "exec", "--json", "--skip-git-repo-check", "-C", workdir, "--model", model]
         argv += (["--dangerously-bypass-approvals-and-sandbox"] if full_access
                  else ["--sandbox", "workspace-write"])
