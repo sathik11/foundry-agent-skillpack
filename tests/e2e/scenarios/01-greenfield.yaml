@@ -1,0 +1,69 @@
+# Greenfield smoke journey — scenario 01.
+# A scenario is a user JOURNEY the driver (opencode/codex) executes end-to-end, plus the
+# assertions the harness checks afterward. This is a SMOKE test: prove the lifecycle runs and
+# produces the expected artifacts; capture feedback; iterate. Not exhaustive validation.
+
+id: greenfield
+title: Greenfield quickstart (plan -> prepare-deploy -> verify)
+recipe: foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md
+surfaces: [agent_framework_runtime, public_mcp, middleware_guardrails]
+
+# Cheapest-sufficient-check-first (plan W4 rule): the driver should NOT rebuild/redeploy when
+# nothing changed; prefer local validation; only azd up when the preflight is green.
+efficiency_notes: |
+  - Run /plan-agent then /prepare-deploy preflight BEFORE any azd up.
+  - If an agent image with the same source hash already exists, reuse it (skip rebuild/push).
+
+# The prompt handed to the driver. Written the way a user would brief a coding agent: the goal,
+# the commands to run, and the guardrails. The driver decides the keystrokes.
+prompt: |
+  You are testing the foundry-agent-skillpack as a real user would, from this repo.
+  Goal: stand up a greenfield hosted agent named `smoke-greenfield` using the skillpack's slash
+  commands, against the already-provisioned Foundry project in resource group
+  `agentskillpack-testbed-rg` (the baseline is ALREADY deployed — do NOT create infra).
+
+  Do this:
+  1. Run `/plan-agent agent_name=smoke-greenfield description="Smoke-test agent answering
+     Microsoft Learn questions via the public Learn MCP server."` — choose Track B (scaffold from
+     template), the agent-framework template, decline knowledge sources, accept middleware
+     guardrails, decline continuous eval for this smoke run. Use an EXISTING model deployment in
+     the account if one exists; do NOT deploy a new model.
+  2. Run `/prepare-deploy agent_path=agents/smoke-greenfield` and let its preflight gates run.
+  3. Only if preflight is green, deploy with `azd up` (the agent layer only). Tag the agent
+     resources with `e2e-ephemeral=true` if the tooling allows.
+  4. Run `/verify-agent agent_name=smoke-greenfield agent_path=agents/smoke-greenfield
+     test_query="What is Azure AI Foundry?"`.
+
+  Rules: do NOT modify the skillpack sources under foundry-agent-skillpack/.apm/. Do NOT provision
+  or delete baseline infrastructure. If a step fails, capture the error and stop — do not loop or
+  retry the same failing command more than twice. Report what you did and the final state.
+
+# Guardrail budgets for THIS scenario (override run_driver defaults).
+budgets:
+  wall_clock: 2400        # 40 min
+  no_progress: 900        # 15 min (warm baseline; azd up is the longest single op ~5-6m)
+  loop_threshold: 3
+
+# Post-run assertions the harness checks (deterministic, no LLM). Each is a check `kind`.
+assertions:
+  - kind: path_exists
+    path: agents/smoke-greenfield/agent-capabilities.yaml
+    desc: plan-agent scaffolded the capabilities manifest
+  - kind: path_exists
+    path: agents/smoke-greenfield/main.py
+    desc: agent-framework template scaffolded
+  - kind: path_exists
+    path: agents/smoke-greenfield/Dockerfile
+    desc: container path scaffolded
+  - kind: agent_status
+    field: deploy.status
+    equals: succeeded
+    desc: azd up reported a successful deploy in agent-status.json
+  - kind: agent_status
+    field: verify.verdict
+    equals: pass
+    desc: /verify-agent sentinel query returned a pass
+
+# Cleanup: ephemeral agent layer only; baseline preserved.
+cleanup:
+  teardown_agents: true
