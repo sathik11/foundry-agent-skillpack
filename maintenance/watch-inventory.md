@@ -13,8 +13,8 @@
 poll and the fixer knows what breaks when upstream moves. Three classes: **SDK packages** (PyPI),
 **ARM api-versions** (`az provider show`), **doc topics** (Microsoft Learn), plus **runtime tooling**.
 
-**Baseline date:** _to be stamped by W0-T4 when the baseline tag is cut._
-**Last manual review (W0-T3):** _pending._
+**Baseline date:** 2026-06-24 — anchored at skillpack package **v0.27.0**, tag `baseline-v0.27.0`.
+**Last manual review (W0-T3):** 2026-06-24 — see [`reviews/2026-06-24-baseline-review.md`](reviews/2026-06-24-baseline-review.md) (11 open major findings → watcher's first batch).
 
 Legend — `deploy_path`: `all` | `container` (Dockerfile path) | `code` (zip/source path) | `caller`
 (runs on laptop/CI, not in the agent image) | `optional` (only if a capability is declared).
