@@ -21,7 +21,7 @@ The skillpack ships scripts under each skill's `scripts/` folder. Most are bash;
 | Script | What it does |
 | --- | --- |
 | [`check-identities.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-identity/scripts/check-identities.sh) | Discover Project MI + per-agent SP for a deployed agent |
-| [`grant-rbac.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-identity/scripts/grant-rbac.sh) | Apply Phase 1 (AcrPull) + Phase 2 (5 runtime roles) in one call |
+| [`grant-rbac.sh`](https://github.com/sathik11/foundry-agent-skillpack/blob/main/foundry-agent-skillpack/.apm/skills/foundry-identity/scripts/grant-rbac.sh) | Apply Phase 1 (AcrPull) + Phase 2 (5 runtime roles) in one call. `--dry-run` / `--what-if` prints the grant plan and exits before any `az role assignment create` |
 
 ## foundry-deploy
 
