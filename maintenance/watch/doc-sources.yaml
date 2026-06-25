@@ -1,6 +1,10 @@
 # maintenance/watch/doc-sources.yaml — machine-readable list of canonical Learn doc
 # topics the watcher hashes + diffs (the human view is watch-inventory.md §4).
-# owner = the skill that must change if the doc content moves.
+# owner    = the skill that must change if the doc content moves.
+# priority = P0 marks the skillpack's crown-jewel surfaces (guardrails, observability/
+#            traceability, evaluations, APIM AI gateway). Re-verify P0 docs every
+#            automation run — they churn fastest as preview features approach GA.
+#            See maintenance/foundry-dependency-map.md § "Per-run freshness priorities".
 docs:
   - id: hosted-agents
     url: https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents
@@ -38,9 +42,18 @@ docs:
   - id: run-ai-red-teaming-cloud
     url: https://learn.microsoft.com/azure/foundry/how-to/develop/run-ai-red-teaming-cloud
     owner: foundry-evals
+    priority: P0
+  - id: evaluation-regions-limits
+    # Authoritative source for eval + red-team region availability, rate limits, VNet.
+    # The region list moved here OUT of run-ai-red-teaming-cloud. Gates ensure_redteam.py
+    # SUPPORTED_REGIONS (TD-9). Batch/quality evals are broad; red-team stays region-limited.
+    url: https://learn.microsoft.com/azure/ai-foundry/concepts/evaluation-regions-limits-virtual-network
+    owner: foundry-evals
+    priority: P0
   - id: custom-evaluators
     url: https://learn.microsoft.com/azure/foundry/concepts/evaluation-evaluators/custom-evaluators
     owner: foundry-evals
+    priority: P0
   - id: what-is-foundry-iq
     url: https://learn.microsoft.com/azure/foundry/agents/concepts/what-is-foundry-iq
     owner: foundry-knowledge
@@ -56,12 +69,22 @@ docs:
   - id: tools-governance
     url: https://learn.microsoft.com/azure/foundry/agents/how-to/tools/governance
     owner: foundry-guardrails
+    priority: P0
   - id: ai-gateway
     url: https://learn.microsoft.com/azure/foundry/agents/how-to/ai-gateway
     owner: foundry-deploy
+    priority: P0
   - id: manage-hosted-sessions
     url: https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-sessions
     owner: foundry-deploy
+  - id: monitor-agents-dashboard
+    # Observability / traceability crown-jewel surface — NEW Foundry portal only
+    # (OTel traces + App Insights + Agent Monitoring Dashboard + continuous eval).
+    # Companion trace concept: /azure/ai-foundry/observability/concepts/trace-agent-concept
+    url: https://learn.microsoft.com/azure/foundry/observability/how-to/how-to-monitor-agents-dashboard
+    owner: foundry-observability
+    priority: P0
   - id: purview-ai
     url: https://learn.microsoft.com/purview/ai-microsoft-purview
     owner: foundry-purview
+    priority: P0

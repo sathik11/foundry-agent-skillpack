@@ -1,0 +1,80 @@
+name: E2E tester track (live)
+
+# Track 2 of the maintenance loop (see maintenance/AUTOMATION.md §3). Drives a scenario through
+# the opencode harness against the LIVE testbed, then ALWAYS tears down the ephemeral Foundry
+# agent resources as part of test completion — pass, fail, or cancel.
+#
+# NOT triggered on push: this run touches live Azure infra and costs money. It runs on:
+#   - manual dispatch (a maintainer validating a candidate), and
+#   - a monthly pre-release window (the tester-track gate before Track 1 cuts a release).
+#
+# The job is pinned to the protected `e2e-testbed` environment so live runs require the
+# product owner's environment approval before any Azure mutation happens.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario yaml under tests/e2e/scenarios/'
+        type: string
+        default: tests/e2e/scenarios/01-greenfield.yaml
+  schedule:
+    - cron: '0 8 1 * *'   # 1st of month 08:00 UTC — pre-release candidate run
+
+permissions:
+  contents: read
+  id-token: write   # OIDC azure/login
+
+concurrency:
+  group: e2e-tester
+  cancel-in-progress: false   # never cancel mid-run — teardown must complete
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    environment: e2e-testbed   # protected env → PO approval gate for live runs
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ secrets.E2E_RESOURCE_GROUP }}
+      # opencode backend token for the LLM driver (run_driver.py). Without it the harness
+      # cannot drive the /commands; the teardown step still runs via if: always().
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run scenario through the harness
+        id: run
+        run: |
+          python tests/e2e/harness.py \
+            --scenario "${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}" \
+            --clean-workspace --backend opencode --run-id "ci-${{ github.run_id }}"
+
+      # MANDATORY test-completion teardown. Runs on EVERY outcome (pass / fail / cancel) so a
+      # failed or cancelled run never leaves billable Foundry agent resources behind. The standing
+      # baseline is preserved — cleanup-sweep.sh only deletes resources tagged `e2e-ephemeral` or
+      # `azd-service-name` (the agent layer the harness creates).
+      - name: Teardown Foundry ephemeral resources
+        if: ${{ always() }}
+        run: |
+          bash infra/cleanup-sweep.sh --apply
+
+      - name: Upload run artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-run-${{ github.run_id }}
+          path: |
+            tests/e2e/ITERATION-LOG.md
+          if-no-files-found: ignore

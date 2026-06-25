@@ -1,17 +1,11 @@
 name: Docs — Build & Deploy to Azure Static Web Apps
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/**'
-      - '.github/workflows/docs.yml'
-      # Drift check needs to run when skillpack sources change too.
-      - 'foundry-agent-skillpack/.apm/skills/**'
-      - 'foundry-agent-skillpack/.apm/prompts/**'
-      - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
-      # Recipe mirror needs to re-run when fixtures recipes change.
-      - 'foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/**'
+  # Production deploy is RELEASE-GATED (see maintenance/AUTOMATION.md §4): the docs site is a
+  # release artifact, published only AFTER a package version is cut — not on every push to main.
+  release:
+    types: [published]
+  # PRs still get a build + drift check + ephemeral SWA preview (no production impact).
   pull_request:
     branches: [main]
     paths:
@@ -20,6 +14,7 @@ on:
       - 'foundry-agent-skillpack/.apm/prompts/**'
       - 'foundry-agent-skillpack/TECHNICAL_DEBT.md'
       - 'foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/**'
+  # Manual republish (e.g. a docs-only hotfix between releases).
   workflow_dispatch: {}
 
 permissions:

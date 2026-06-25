@@ -23,6 +23,16 @@ For the rendered version with cross-links, see the [docs site Roadmap page](docs
 
 ## Planned
 
+### Triage intake (from upstream-watch §7 — human-gated, unscheduled)
+
+Feature-candidates and new-scenario items routed in via the rolling triage issue. They are tracked
+here/as TDs but do **not** ride the scheduled watcher — they go dev → tester track → release.
+
+- **TD-36 — Rubric evaluator support.** New first-party evaluator; verify id/params on the live
+  catalog, add to the known-evaluator set, allow in continuous/scheduled eval wrappers.
+- **TD-37 — LangGraph recipe-tester scenario.** Executable `tests/e2e` scenario for the
+  `langgraph-chat-sample` fixture; the test vehicle that closes TD-35 (LangGraph observability/eval).
+
 ### v0.24 — AGT integration headline + cross-OS bake-off (research)
 
 - **TD-29 (ship):** First-class AGT integration. `runtime_governance: agt` key in `agent-capabilities.yaml`; `/prepare-deploy` injects `agent-governance-toolkit[full]` into the agent's container `requirements.txt`; templates wrap declared tools with `govern(...)`; eval rules cross-link AGT decisions via OTel `evaluator.agt.*` spans; `/audit-drift` reconciles declared policy file against the deployed container; `foundry-guardrails` skill gains a real Layer 0 section.

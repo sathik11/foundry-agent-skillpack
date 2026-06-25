@@ -8,11 +8,20 @@ feedback bundle to iterate on. The DRIVER verdict (how the run went) and the ASS
 (did it produce the right artifacts) are reported separately.
 
 Usage:
+  # F-K: fresh, faithful run — create a clean NON-git workspace + apm-install the skillpack:
+  harness.py --scenario tests/e2e/scenarios/01-greenfield.yaml \
+      --clean-workspace [--workspace-root <dir>] [--backend opencode] [--run-id <id>]
+
+  # Or drive an existing prepared workspace:
   harness.py --scenario tests/e2e/scenarios/01-greenfield.yaml \
       --workdir <agent-repo-root> [--backend opencode] [--run-id <id>] [--skip-driver]
 
-  --skip-driver   only re-check assertions against an existing workdir (no LLM run) — for
-                  iterating on assertions without burning a full journey.
+  --clean-workspace   F-K: build a fresh workspace OUTSIDE any git repo and `apm install` the
+                      skillpack into it (the only faithful reproduction of real usage and the
+                      only layout where `azd ai agent init` staging works — see ITERATION-LOG
+                      F-J/F-K). Mutually exclusive with --workdir.
+  --skip-driver       only re-check assertions against an existing --workdir (no LLM run) — for
+                      iterating on assertions without burning a full journey.
 
 Exit: 0 only if BOTH driver verdict == completed AND all assertions pass.
 """
@@ -30,6 +39,32 @@ import yaml
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 DRIVER = HERE / "driver" / "run_driver.py"
+SETUP = HERE / "setup-workspace.sh"
+
+
+def setup_clean_workspace(skillpack_src: str, workspace_root: str | None, run_id: str) -> Path | None:
+    """F-K: create a fresh NON-git workspace under <workspace_root>/<run_id> and apm-install the
+    skillpack into it (via setup-workspace.sh). Returns the prepared workspace path, or None."""
+    root = Path(workspace_root).expanduser() if workspace_root \
+        else Path.home() / ".cache" / "foundry-skillpack-e2e"
+    dest = root / run_id
+    print(f"[harness] F-K: preparing clean non-git workspace at {dest}\u2026")
+    proc = subprocess.run(
+        ["bash", str(SETUP), "--dest", str(dest),
+         "--src", str(Path(skillpack_src).resolve()), "--force"],
+        text=True, capture_output=True,
+    )
+    sys.stdout.write(proc.stdout)
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stderr)
+        print(f"[!] workspace setup failed (exit {proc.returncode})", file=sys.stderr)
+        return None
+    ws = next((ln.split("=", 1)[1].strip()
+               for ln in proc.stdout.splitlines() if ln.startswith("WORKSPACE=")), None)
+    if not ws:
+        print("[!] setup-workspace.sh did not emit WORKSPACE=", file=sys.stderr)
+        return None
+    return Path(ws).resolve()
 
 
 def load_status(workdir: Path, agent_rel: str | None) -> dict | None:
@@ -96,7 +131,15 @@ def _agent_rel(scenario: dict) -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--scenario", required=True)
-    ap.add_argument("--workdir", required=True)
+    ap.add_argument("--workdir", default=None,
+                    help="existing agent workspace to drive in. Mutually exclusive with --clean-workspace.")
+    ap.add_argument("--clean-workspace", action="store_true",
+                    help="F-K: build a fresh NON-git workspace and apm-install the skillpack into it.")
+    ap.add_argument("--workspace-root", default=None,
+                    help="parent dir for --clean-workspace (default: $HOME/.cache/foundry-skillpack-e2e). "
+                         "Must be outside any git repo.")
+    ap.add_argument("--skillpack-src", default=str(REPO),
+                    help="skillpack repo root holding foundry-agent-skillpack/ (default: repo root).")
     ap.add_argument("--backend", default="opencode", choices=["opencode", "codex"])
     ap.add_argument("--model", default=None)
     ap.add_argument("--run-id", default=None)
@@ -104,8 +147,25 @@ def main() -> int:
     args = ap.parse_args()
 
     scenario = yaml.safe_load(Path(args.scenario).read_text())
-    workdir = Path(args.workdir).resolve()
     run_id = args.run_id or f"{scenario['id']}-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
+
+    if args.clean_workspace and args.workdir:
+        print("[!] --clean-workspace and --workdir are mutually exclusive", file=sys.stderr)
+        return 2
+    if not args.clean_workspace and not args.workdir:
+        print("[!] need --workdir <dir> or --clean-workspace", file=sys.stderr)
+        return 2
+    if args.clean_workspace and args.skip_driver:
+        print("[!] --skip-driver re-checks an existing --workdir; it cannot use a fresh --clean-workspace",
+              file=sys.stderr)
+        return 2
+
+    if args.clean_workspace:
+        workdir = setup_clean_workspace(args.skillpack_src, args.workspace_root, run_id)
+        if workdir is None:
+            return 2
+    else:
+        workdir = Path(args.workdir).resolve()
     art = REPO / "tests" / "e2e" / "artifacts" / run_id
     art.mkdir(parents=True, exist_ok=True)
 
@@ -145,6 +205,7 @@ def main() -> int:
         "scenario": scenario["id"],
         "run_id": run_id,
         "backend": args.backend,
+        "workdir": str(workdir),
         "driver_verdict": driver_verdict.get("verdict"),
         "driver_reason": driver_verdict.get("reason"),
         "assertions_passed": passed,

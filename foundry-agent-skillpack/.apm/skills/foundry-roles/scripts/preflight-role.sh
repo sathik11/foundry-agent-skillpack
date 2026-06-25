@@ -36,7 +36,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 caller_oid=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
 if [[ -z "$caller_oid" ]]; then
-  echo "[!] Not logged in to az. Run 'az login' first." >&2
+  # `az ad signed-in-user show` only works for interactive USER logins. Under a
+  # service-principal or managed-identity login (the DevOps/CI persona this
+  # preflight targets) it returns nothing — so resolve the caller from the
+  # active az account instead of declaring "not logged in".
+  acct_type=$(az account show --query user.type -o tsv 2>/dev/null || true)
+  acct_name=$(az account show --query user.name -o tsv 2>/dev/null || true)
+  if [[ "$acct_type" == "servicePrincipal" && -n "$acct_name" ]]; then
+    # Prefer the SP's directory object id; fall back to the appId, which
+    # `az role assignment list --assignee` also accepts.
+    caller_oid=$(az ad sp show --id "$acct_name" --query id -o tsv 2>/dev/null || true)
+    [[ -z "$caller_oid" ]] && caller_oid="$acct_name"
+  fi
+fi
+if [[ -z "$caller_oid" ]]; then
+  echo "[!] Could not resolve caller identity. Run 'az login' first." >&2
   exit 2
 fi
 

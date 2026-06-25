@@ -109,11 +109,15 @@ Tracked gaps and trade-offs in the foundry-agent-skillpack APM package. Each ent
 
 ## TD-9 — Cloud red-team region list is hard-coded
 
-**What:** [foundry-evals/scripts/ensure_redteam.py](.apm/skills/foundry-evals/scripts/ensure_redteam.py) hard-codes `SUPPORTED_REGIONS = {"eastus2", "francecentral", "swedencentral", "switzerlandwest", "northcentralus"}` as of 2026-05-14.
+**What:** [foundry-evals/scripts/ensure_redteam.py](.apm/skills/foundry-evals/scripts/ensure_redteam.py) caches `SUPPORTED_REGIONS` (refreshed 2026-06-15: `eastus2, northcentralus, francecentral, swedencentral, switzerlandwest, australiaeast`). This set churns as the preview expands and the list **moved doc** — it is no longer in the red-team how-to; the authoritative source is now [Rate limits, region support, and enterprise features for evaluation](https://learn.microsoft.com/azure/ai-foundry/concepts/evaluation-regions-limits-virtual-network) (§ *Risk and safety evaluators and AI red teaming region support*).
+
+**Scope correction:** Only cloud **red-team + hosted risk/safety evaluators** are region-limited. **Batch/quality evals (continuous + scheduled) are broadly available (~30 regions incl. `westus`)** and are intentionally NOT region-gated. Don't conflate the two.
 
 **Why deferred:** No public API exposes the supported region set programmatically.
 
-**Close-out:** Daily docs scan against [Run AI Red Teaming Agent in the cloud](https://learn.microsoft.com/azure/foundry/how-to/develop/run-ai-red-teaming-cloud) updates the constant via PR. Until that lands, the script asks the human to verify.
+**Mitigation (v0.27.x):** The gate is now advisory, not a wall — `ensure_redteam.py` bypasses the cached set under `--dry-run` or `REDTEAM_ALLOW_UNSUPPORTED_REGION=1` and defers to the live service. The doc is tracked as `priority: P0` in `maintenance/watch/doc-sources.yaml` (id `evaluation-regions-limits`), so each automation run re-verifies it — see `maintenance/foundry-dependency-map.md` § *Per-run freshness priorities*.
+
+**Close-out:** Docs-watch diff on the `evaluation-regions-limits` P0 source updates the constant via PR.
 
 ## ~~TD-10 — Network detection scripts don't walk NSGs / Azure Firewall / SEPs~~ **(CLOSED in v0.20.0)**
 
@@ -428,6 +432,8 @@ Plus a shared error-surfacing helper `_az_rest_capture()` that replaces `|| echo
 **What:** Every `.apm/skills/*/scripts/*.sh` in the skillpack is bash-only (28+ scripts, ~79 `az` invocations, ~104 `jq` invocations). Native Windows (PowerShell / cmd) cannot run them. Today's only Windows path is WSL2; Git Bash partially works but bites on path mangling, `python3` aliasing, and process substitution in multi-line `jq` pipelines.
 
 **Why this is debt:** Foundry is a Microsoft product; the customer base skews Windows-enterprise. A skillpack that requires WSL2 for first use is architectural debt, not just a docs problem. Microsoft Learn itself maintains thousands of dual bash/pwsh code snippets — there is a working precedent we are not following.
+
+**Token/time cost of the missing-script fallback (added 2026-06-25):** when a script is unavailable for the host OS (Windows, no `.ps1`) or fails to run, the agent does not stop — it silently falls back to driving the VS Code Foundry MCP tool directly, in a multi-call read/poll loop. That fallback is materially worse than a native script: it burns model tokens and wall-clock time on round-trips that a single deterministic script call would have collapsed, and it produces no greppable artifact for parity testing or review. The fallback loop is the *most expensive* failure mode of the bash-only posture and is the primary argument for native per-OS scripts over "the MCP will cover Windows." The bake-off success criteria below should explicitly include "eliminates the MCP-fallback loop on `windows-latest`," not just LOC/runtime parity.
 
 **Why deferred from v0.23.0:** Needs a real bake-off, not a guess. v0.23.0 shipped the install script for the supported (macOS / Linux / WSL2) path and documented the gap honestly.
 
@@ -820,3 +826,55 @@ The prompt grew a new Step 2.5 ("Confirm RBAC posture") that explains the load-b
 **Lesson learned (RBAC):** ARM role assignments resolve `--assignee <objId>` to `appId` form in the Principal column, which made it impossible to confirm grants by reading `az role assignment list --assignee <objId>` against the project MI's object ID (rows were keyed under the appId form). Always use `--assignee-object-id` to query and grant; the create command additionally requires `--assignee-principal-type ServicePrincipal` to disambiguate. The Cosmos data-plane role is the easy-to-miss gotcha — it doesn't appear in regular RBAC listings, lives only on the Cosmos account as a SQL role assignment, and is the single most common reason a freshly-provisioned project capabilityHost fails.
 
 **Cross-ref to TD-32 / TD-33:** TD-32 surfaced the gap (capability hosts not assessed correctly + no remediation path), TD-33 made the assessment a single-call wrapper, TD-34 closes the loop with a real mutator that supports both "pick existing connection" and "BYO inline create from ARM ID", plus the `--grant-rbac` step that takes the project MI from "no roles" to "fully provisioned" without a second skill invocation. All three close under v0.26.0.
+
+## TD-35 — Observability + evaluation unverified for a LangGraph hosted agent (OPEN — human-review backlog)
+
+**What:** The observability ([7]) and evaluation/red-team ([6]) surfaces have only been exercised end-to-end against agent-framework / `azure-ai-projects`-native agents. The skillpack advertises LangGraph as a supported brownfield runtime (recipe 01 names `langgraph-chat-sample` as a fixture, and the brownfield code-scan recognizes LangGraph), but no test run has confirmed that:
+
+1. OTel GenAI spans emitted by a LangGraph graph land in App Insights with the attributes the Agent Monitoring Dashboard expects (`gen_ai.*` span conventions, agent/run correlation IDs).
+2. Continuous-evaluation rules created via `azure-ai-projects` actually sample and score traffic from a LangGraph-backed hosted agent (the rule binds to an agent/deployment; the LangGraph node boundary may not map cleanly to the run/thread shape the eval sampler keys on).
+3. The cloud red-team scan targets a LangGraph hosted agent without the adapter swallowing or reshaping turns in a way that defeats the adversarial probes.
+
+**Why this is debt:** "Supported runtime" + "crown-jewel outer-loop surfaces" is an implied compatibility claim we have not verified for the second-most-likely customer runtime. If LangGraph spans or eval bindings silently no-op, a customer following recipe 01 with the LangGraph fixture gets an empty Monitor dashboard and assumes the skillpack is broken.
+
+**Acceptance (to close):** a recorded e2e run (added to `tests/e2e/`) that deploys the `langgraph-chat-sample` fixture as a hosted agent, drives traffic, and asserts (a) non-empty trace spans with the expected GenAI attributes in App Insights, (b) at least one continuous-eval run reaching status `Completed` with a score, and (c) one cloud red-team scan completing against it. Document any adapter/instrumentation shim required in `foundry-observability` / `foundry-evals`.
+
+**Why deferred:** needs a live testbed run against the LangGraph fixture and is gated on the tester-track e2e harness maturing (see automation tracks doc). Human-reviewed item — revisit when LangGraph appears in a real consumer install or when the e2e harness can host non-native fixtures.
+
+**Cross-refs:** TD-8 (preview SDK surface drift on the eval APIs this would exercise), TD-9 (red-team region gating the scan in (c) must respect), `maintenance/foundry-dependency-map.md` stages [6]/[7].
+
+## TD-36 — Rubric evaluator support (OPEN — triage intake, human-gated)
+
+**Source:** upstream-watch §7 feature-candidate — a new first-party **Rubric evaluator** surfaced in the
+Foundry evaluator catalog. Logged here (not auto-applied) per the human-in-the-loop process in
+`maintenance/AUTOMATION.md` §7.
+
+**What:** `foundry-evals` currently declares a fixed `BUILT_IN_EVALUATORS` set and wires
+continuous/scheduled eval rules against it. Adopting Rubric means: confirm the canonical evaluator
+id + required init params against the live `custom-evaluators` / evaluator-catalog doc, add it to the
+known-evaluator set in `_common.py`, allow it in `ensure_continuous_eval.py` / `ensure_scheduled_eval.py`,
+and document the grader/rubric input shape.
+
+**Acceptance (to close):** (a) Rubric id + params verified against the live doc/SDK (not guessed);
+(b) an eval rule using Rubric created + reaching `Completed` with a score on the testbed; (c) a
+recipe/scenario note showing how a customer declares it in `agent-capabilities.yaml`.
+
+**Why deferred:** preview evaluator surface (TD-8 churn risk); needs a live verification pass on the
+tester track before it ships. Revisit at the next monthly review or when a consumer asks for it.
+
+## TD-37 — LangGraph as a recipe-tester fixture/scenario (OPEN — triage intake, human-gated)
+
+**Source:** upstream-watch §7 new-recipe/new-scenario candidate. Companion to TD-35 (which tracks the
+*observability/eval* compatibility question); this entry tracks the *test vehicle* that would close it.
+
+**What:** Add an executable tester-track scenario (`tests/e2e/scenarios/03-langgraph-*.yaml`) that
+deploys the `langgraph-chat-sample` fixture as a hosted agent and drives the recipe-01 command
+sequence, so LangGraph stops being "documented but unverified" (AUTOMATION.md §6). This is the
+harness work TD-35's acceptance depends on (the harness must host a non-native fixture).
+
+**Acceptance (to close):** scenario yaml lands; one green run through `e2e-test.yml` (with the
+mandatory teardown); TD-35 assertions (a)/(b)/(c) become checkable from it.
+
+**Why deferred:** gated on the tester-track CI (`e2e-test.yml`, just added) getting its testbed
+secrets + protected-env approval wired, and on the harness supporting non-native fixtures. Human-
+reviewed; sequence after the first green native scenario run.

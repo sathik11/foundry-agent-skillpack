@@ -68,6 +68,7 @@ export default defineConfig({
             { slug: 'reference/prompts' },
             { slug: 'reference/scripts' },
             { slug: 'reference/role-matrix' },
+            { slug: 'reference/mcp-fallback' },
           ],
         },
         {

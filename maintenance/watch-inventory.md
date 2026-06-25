@@ -86,8 +86,9 @@ Each row: a doc whose *content changing* forces a skillpack edit. `owner` = skil
 | Private link / outbound isolation | `…/foundry/how-to/configure-private-link` | foundry-prod-readiness |
 | Managed VNet | `…/foundry/how-to/managed-virtual-network` | foundry-prod-readiness |
 | Virtual networks (agents) | `…/foundry/agents/how-to/virtual-networks` | foundry-prod-readiness |
-| Run AI Red Teaming in the cloud | `…/foundry/how-to/develop/run-ai-red-teaming-cloud` | foundry-evals (TD-9 region list) |
-| Custom evaluators | `…/foundry/concepts/evaluation-evaluators/custom-evaluators` | foundry-evals |
+| Run AI Red Teaming in the cloud | `…/foundry/how-to/develop/run-ai-red-teaming-cloud` | foundry-evals (red-team SDK) **[P0]** |
+| Evaluation region support / rate limits / VNet | `…/ai-foundry/concepts/evaluation-regions-limits-virtual-network` | foundry-evals (TD-9 region list — authoritative source) **[P0]** |
+| Custom evaluators | `…/foundry/concepts/evaluation-evaluators/custom-evaluators` | foundry-evals **[P0]** |
 | What is Foundry IQ | `…/foundry/agents/concepts/what-is-foundry-iq` | foundry-knowledge |
 | Foundry IQ connect | `…/foundry/agents/how-to/foundry-iq-connect` | foundry-knowledge |
 | AI Search tool | `…/foundry/agents/how-to/tools/ai-search` | foundry-knowledge |

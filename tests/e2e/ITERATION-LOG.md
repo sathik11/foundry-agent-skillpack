@@ -138,3 +138,81 @@ Drove the complete journey to a working deployed agent. Final verify: **HTTP 200
 
 Total real skillpack defects found by this smoke: **F-F, F-G, F-H, F-I, F-M** (5 fixed) + harness/azd
 design findings F-J/F-K/F-L. The autonomous E2E test has decisively proven its value.
+
+## 2026-06-25 — F-K RESOLVED: harness clean-workspace setup step
+
+Built the missing workspace-setup step so the full-deploy journey is reproducible by the harness
+alone (was previously achieved partly by manual SP debugging).
+
+| ID | Finding | Status |
+|---|---|---|
+| F-K | E2E must run in a CLEAN non-git workspace with the skillpack apm-installed. | **RESOLVED** |
+
+What landed:
+- `tests/e2e/setup-workspace.sh` — creates a NON-git workspace (default
+  `$HOME/.cache/foundry-skillpack-e2e/<run-id>`), `apm install`s the local skillpack + playbook
+  (`--target opencode,agent-skills`), and verifies the installed layout. Hard guard: refuses any
+  `--dest` inside a git repo (exit 3) — the F-J root cause.
+- `harness.py` — new `--clean-workspace` (mut-excl with `--workdir`), `--workspace-root`,
+  `--skillpack-src`; on a clean run it builds the workspace, drives in it, and records `workdir`
+  in `harness-report.json`. `--skip-driver` still requires `--workdir`.
+- `scenarios/01-greenfield.yaml` — script/template/recipe references repointed from `.apm/` SOURCE
+  paths to the **installed** paths (`.agents/skills/foundry-deploy/...`,
+  `.agents/skills/foundry-agent-playbook/recipes/...`), matching what a real installed project has.
+
+Validated (offline): non-git guard fires (exit 3); `apm install` into a fresh dir yields
+`.opencode/agents/foundry-engineer.md` + 11 commands + 15 skills incl. the F-G/F-M
+`agent.manifest.yaml.template`; harness `setup_clean_workspace()` returns the prepared non-git path.
+
+Run it:
+```
+python3 tests/e2e/harness.py --scenario tests/e2e/scenarios/01-greenfield.yaml --clean-workspace
+```
+
+### Remaining before a full GREEN via harness alone
+The scenario prompt still says `azd up` (step 5). Per **F-L** the RG-scoped SP must deploy with
+`azd deploy` using the standing baseline (env: USE_EXISTING_AI_PROJECT=true, AZURE_AI_PROJECT_ID,
+FOUNDRY_PROJECT_ENDPOINT, …). Encoding the 7-step deploy recipe above into the scenario is the next
+task; until then a live `--clean-workspace` run reaches the deploy gate and stops there (correctly).
+
+## 2026-06-25 — Scenario 02 (setup-evals) + two skillpack defects (F-N, F-O)
+
+Built a second scenario to extend coverage past the greenfield deploy path: `/setup-evals` driven in
+**dry-run** (no mutation, cheap, repeatable). Building it surfaced two real skillpack bugs via direct
+script invocation — both fixed and verified.
+
+| ID | Finding | Status |
+|---|---|---|
+| F-N | `foundry-evals/scripts/_common.py` imported `azure-ai-projects` + `azure-identity` + `yaml` **at module load**, so `--dry-run` crashed with `ModuleNotFoundError: No module named 'azure'` even though each `ensure_*_eval.py` carefully DEFERS its own `azure.ai.projects.models` import until after the dry-run early-return. The shared module defeated that contract: dry-run / role-preflight could never run without the full SDK installed (contradicts the prompt's "Legacy fallback … without the SDK installed" note and the caller-side dep model). | **FIXED** — made the three heavy imports lazy (moved into `load_capabilities` / `get_project_client`; `from __future__ import annotations` already makes the return hint lazy). |
+| F-O | `foundry-roles/scripts/preflight-role.sh` resolved the caller via `az ad signed-in-user show`, which **only works for interactive USER logins**. Under a **service-principal / managed-identity** login — exactly the DevOps/CI persona this gate targets — it returned empty → "Not logged in to az" → exit 2 (best-effort). So in automation the role preflight was **permanently blind** and never actually verified any role across the whole skillpack (it's the shared gate for setup-evals, configure-rbac, prepare-deploy, setup-purview, publish-teams, audit-drift). | **FIXED** — fall back to `az account show` (`user.type == servicePrincipal`), resolve the SP's object id via `az ad sp show --id <appId>` (fallback to the appId, which `az role assignment list --assignee` also accepts). |
+
+What landed:
+- `foundry-agent-skillpack/.apm/skills/foundry-evals/scripts/_common.py` — lazy imports (F-N).
+- `foundry-agent-skillpack/.apm/skills/foundry-roles/scripts/preflight-role.sh` — SP identity
+  resolution (F-O).
+- `tests/e2e/scenarios/02-setup-evals.yaml` — dry-run-first scenario: scaffolds a minimal
+  `agent-capabilities.yaml` (declares `capabilities.evals.{role,continuous,scheduled}`, redteam
+  disabled), runs preflight + `ensure_continuous_eval.py --dry-run` + `ensure_scheduled_eval.py
+  --dry-run`, captures combined stdout/stderr to logs, asserts on the printed plans + preflight
+  verdict. Red-team is intentionally skipped (project is westus → unsupported red-team region →
+  `ensure_redteam.py` exits 3 before the dry-run return).
+
+Schema notes confirmed from the wrappers:
+- continuous reads `capabilities.evals.continuous.*` + `capabilities.evals.role`; scheduled reads
+  `capabilities.evals.scheduled.*`; redteam reads `capabilities.evals.redteam.*`.
+- scheduled **hard-requires** a dataset (`--dataset-jsonl`/`--dataset-id` or
+  `evals.scheduled.dataset.path/dataset_id`) or it exits 2 — the scenario provides
+  `eval/regression-set.jsonl`.
+- the SP baseline has **Foundry User** assigned directly at project scope (granted during the
+  greenfield deploy), so preflight returns rc 0 once F-O lets it resolve the SP.
+
+Validated **deterministically** (no LLM driver) in a fresh F-K clean workspace
+(`apm install` propagates both fixes into `.agents/skills/…`): preflight rc 0 ("Caller has
+'Foundry User'"), continuous rc 0, scheduled rc 0; **all 6 scenario assertions PASS**.
+
+Run it:
+```
+python3 tests/e2e/harness.py --scenario tests/e2e/scenarios/02-setup-evals.yaml --clean-workspace
+```
+
+Total real skillpack defects found by this smoke: **F-F, F-G, F-H, F-I, F-M, F-N, F-O** (7 fixed).

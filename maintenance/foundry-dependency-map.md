@@ -112,3 +112,42 @@ Cross-cutting (apply at several stages):
 
 > The standing baseline infra (`infra/`) provisions the slow stages once (0–2 prerequisites + APIM +
 > AI Search + VNet/PE); each E2E run recreates only stage [4]'s agent layer via `azd up`/`azd down`.
+
+## Per-run freshness priorities (P0 crown-jewel surfaces)
+
+The skillpack's value concentrates in five surfaces that are still **preview-state and churn fastest**:
+guardrails, observability, traceability, evaluations, and the APIM AI-gateway. Preview features add
+regions, flip to GA, and rename APIs *between runs* — so any region list, feature flag, or
+api-version we cache (e.g. `SUPPORTED_REGIONS`, `BUILT_IN_EVALUATORS`, `Foundry-Features` headers)
+is a snapshot that silently goes stale. **Every automation run re-verifies the P0 doc set
+(`priority: P0` in `watch/doc-sources.yaml`) before trusting any cached constant.** A cached value is
+advisory; the live doc + live service are authoritative.
+
+| P0 surface | Stage | Authoritative Learn doc (`doc-sources.yaml` id) | Cached artifact that goes stale | What breaks if stale |
+|---|---|---|---|---|
+| **Evaluations — region availability** | [6] | `evaluation-regions-limits` | `ensure_redteam.py` `SUPPORTED_REGIONS` (TD-9) | false-reject a now-supported region (e.g. `australiaeast` added 2026-06) → red-team blocked |
+| **Evaluations — built-ins / graders** | [6] | `custom-evaluators` | `_common.py` `BUILT_IN_EVALUATORS`; `ensure_*_eval.py` SDK model classes (TD-8) | unknown evaluator name → eval-rule create 400; renamed SDK class → ImportError |
+| **Evaluations — red-team SDK** | [6] | `run-ai-red-teaming-cloud` | `RedTeam`/`AzureAIAgentTarget` surface, attack-strategy enums | preview SDK rename → red-team create fails |
+| **Guardrails** | [5] | `tools-governance`, `purview-ai` | L1.5 Purview DLP middleware contract; Content Safety api | governance rename → middleware no-ops silently |
+| **Observability / traceability** | [7] | `monitor-agents-dashboard` | `azure-monitor-opentelemetry` floor; OTel GenAI span attrs; continuous-eval link | trace spans drop / continuous-eval dashboard gap |
+| **APIM AI gateway** | [8] | `ai-gateway` | inbound-firewall runbook + APIM bicep (v2, `validate-jwt`, M365 service tags) | publish path blocked / token validation breaks |
+
+### Per-run preflight (wire into the E2E harness, before assertions)
+
+1. `python maintenance/watch/collect-drift.py --summary -` — hashes every doc and diffs against
+   `watch/doc-baseline.json`.
+2. **Gate on P0:** if any `priority: P0` doc reports `changed: true`, the run is **doc-stale** —
+   surface it as a warning/finding and route to the owning skill (the `owner` field) before trusting
+   cached constants. P1/P2 changes are logged, not gated.
+3. Region/feature gates (red-team) are **advisory, not walls**: `ensure_redteam.py` now bypasses its
+   cached region set under `--dry-run` or `REDTEAM_ALLOW_UNSUPPORTED_REGION=1`, deferring to the live
+   service. Apply the same "snapshot is advisory, live source wins" rule to any new preview gate.
+
+### Worked example — the stale red-team region claim (TD-9)
+
+The region whitelist **moved doc** (out of `run-ai-red-teaming-cloud` into `evaluation-regions-limits`,
+verified 2026-06-15) **and changed** (`australiaeast` added vs the 2026-05-14 snapshot). Equally
+important: only cloud **red-team + hosted risk/safety evaluators** stay region-limited (6 regions);
+**batch/quality evals — continuous + scheduled — are broadly available (~30 regions incl. `westus`)**
+and must NOT be region-gated. A frozen constant conflated the two and would have wrongly blocked a
+valid `westus` or `australiaeast` run. This is the canonical reason every run re-checks P0 docs.

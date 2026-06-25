@@ -6,8 +6,14 @@ name: upstream-watch
 
 on:
   schedule:
-    - cron: '17 6 * * 2'   # Tue 06:17 UTC
-    - cron: '17 6 * * 5'   # Fri 06:17 UTC
+    # DETECTION cadence stays fast (twice weekly) so nothing goes stale for long. These runs are
+    # REPORT-ONLY and never block. See maintenance/AUTOMATION.md §3/§7 for the cadence split.
+    - cron: '17 6 * * 2'   # Tue 06:17 UTC  (detect)
+    - cron: '17 6 * * 5'   # Fri 06:17 UTC  (detect)
+    # APPLY/PACKAGE review window is monthly (max), per product-owner intent. The 1st-of-month
+    # run is where version-drift findings become an auto-PR candidate; feature-candidates are
+    # human-gated regardless of schedule (§7).
+    - cron: '0 7 1 * *'    # 1st of month 07:00 UTC  (apply/package review)
   workflow_dispatch:
     inputs:
       mode:
@@ -23,6 +29,7 @@ on:
 permissions:
   contents: read
   id-token: write   # for azure/login OIDC (api-version poll); read-only Azure access
+  issues: write     # §7 human-in-the-loop: open/update the rolling triage issue for the PO
 
 concurrency:
   group: upstream-watch
@@ -77,6 +84,49 @@ jobs:
           path: |
             maintenance/watch/drift-report.json
             drift-summary.md
+
+      # §7 HUMAN-IN-THE-LOOP: route findings to the product owner via a single ROLLING triage
+      # issue (find-or-create, never spams). This is how a new feature / recipe / scenario gets
+      # in front of a human WITHOUT the scheduled run ever applying it. Non-blocking by design.
+      - name: Route findings to product owner (rolling triage issue)
+        if: ${{ github.event_name == 'schedule' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let summary = '';
+            try { summary = fs.readFileSync('drift-summary.md', 'utf8'); } catch (e) {}
+            if (summary.length > 50000) summary = summary.slice(0, 50000) + '\n…(truncated)';
+            const marker = '<!-- upstream-watch-rolling -->';
+            const title = '🔭 Upstream drift triage (rolling)';
+            const body = [
+              marker,
+              `_Last updated: ${new Date().toISOString()} · run ${context.runId}_`,
+              '',
+              '**Process (see `maintenance/AUTOMATION.md` §7):** version-drift findings are eligible',
+              'for the monthly auto-PR window. **New features, new recipes, and new test scenarios',
+              'are human-gated** — convert them to a ROADMAP or TECHNICAL_DEBT entry below; the',
+              'scheduled run must never apply them on its own.',
+              '',
+              '### Triage checklist',
+              '- [ ] A **new feature** appeared upstream (e.g. a new evaluator like Rubric, a new runtime)? → open a ROADMAP/TD item, then route to normal dev → tester track.',
+              '- [ ] A **new recipe / runtime fixture** to support (e.g. LangGraph as a recipe tester)? → add a `tests/e2e/scenarios/*.yaml` + a recipe.',
+              '- [ ] A **new test scenario** to cover? → add to the tester track backlog (AUTOMATION.md §6).',
+              '- [ ] **Version-drift only**? → leave for the monthly apply window.',
+              '',
+              '### Latest drift summary',
+              summary || '_(no summary artifact produced)_',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const existing = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'upstream-watch', per_page: 100 });
+            const found = existing.data.find(i => i.body && i.body.includes(marker));
+            if (found) {
+              await github.rest.issues.update({ owner, repo, issue_number: found.number, body });
+              core.notice(`Updated rolling triage issue #${found.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body, labels: ['upstream-watch'] });
+              core.notice(`Opened rolling triage issue #${created.data.number}`);
+            }
 
       # ---- report-only stops here. The apply path (W2-T4) is intentionally not wired yet. ----
       - name: Apply mode (disabled in report-only rollout)

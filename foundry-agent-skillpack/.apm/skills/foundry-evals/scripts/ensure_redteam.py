@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Idempotently create or update a cloud red-team scan for an agent (preview).
 
-Region-locked. Hard-fails preflight if the project's region is unsupported.
+Region-gated (preview). The supported-region set below is a *snapshot* of a Learn doc
+that changes as the feature expands toward GA, so it is treated as advisory: --dry-run
+and the REDTEAM_ALLOW_UNSUPPORTED_REGION override both bypass the hard gate, and the
+live service remains authoritative. Only cloud red-team + the hosted risk/safety
+evaluators are region-limited — batch/quality evals (continuous + scheduled) run in
+~30 regions incl. westus, so they are NOT gated here. See TD-9.
 
 Usage:
   python ensure_redteam.py \
@@ -17,13 +22,17 @@ Usage:
       [--one-shot] \
       [--dry-run]
 
-Env: YES=1 to skip confirm.
+Env:
+  YES=1                              skip confirm.
+  REDTEAM_ALLOW_UNSUPPORTED_REGION=1 bypass the region gate (the snapshot below is stale-prone;
+                                     the live service is authoritative).
 
 Exit codes: 0 success / 1 missing role / 2 invalid input / 3 region not supported.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -32,10 +41,18 @@ from _common import (
     print_summary,
 )
 
-# As of 2026-05-14. Update when Foundry expands the supported region list.
+# Snapshot of "Risk and safety evaluators and AI red teaming region support" as of 2026-06-15.
+# Source of truth (re-verify every automation run — this set churns as the preview expands):
+#   https://learn.microsoft.com/azure/ai-foundry/concepts/evaluation-regions-limits-virtual-network
+# NOTE: the region list moved OUT of the run-ai-red-teaming-cloud how-to into the doc above.
 SUPPORTED_REGIONS: set[str] = {
-    "eastus2", "francecentral", "swedencentral", "switzerlandwest", "northcentralus",
+    "eastus2", "northcentralus", "francecentral", "swedencentral", "switzerlandwest",
+    "australiaeast",
 }
+REGION_DOC = (
+    "https://learn.microsoft.com/azure/ai-foundry/concepts/"
+    "evaluation-regions-limits-virtual-network"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,13 +76,20 @@ def main() -> int:
     args = parse_args()
 
     region = args.project_region.lower().replace(" ", "")
+    override = os.environ.get("REDTEAM_ALLOW_UNSUPPORTED_REGION", "").strip().lower() not in ("", "0", "false", "no")
     if region not in SUPPORTED_REGIONS:
-        print(f"[x] Cloud red-team is not available in region '{args.project_region}'.", file=sys.stderr)
-        print(f"    Supported (as of 2026-05-14): {', '.join(sorted(SUPPORTED_REGIONS))}", file=sys.stderr)
-        print( "    Either: (a) deploy a separate Foundry project in a supported region for red-team only,", file=sys.stderr)
-        print( "            (b) run PyRIT-in-CI fallback (foundry-guardrails/scripts/redteam.yml),", file=sys.stderr)
-        print( "            (c) wait for the region to be added.", file=sys.stderr)
-        return 3
+        print(f"[!] Region '{args.project_region}' is not in the cached cloud red-team region set.", file=sys.stderr)
+        print(f"    Cached (snapshot 2026-06-15): {', '.join(sorted(SUPPORTED_REGIONS))}", file=sys.stderr)
+        print(f"    This list churns as the preview expands \u2014 verify against the live doc:", file=sys.stderr)
+        print(f"    {REGION_DOC}  (section: Risk and safety evaluators and AI red teaming region support)", file=sys.stderr)
+        if args.dry_run or override:
+            why = "--dry-run" if args.dry_run else "REDTEAM_ALLOW_UNSUPPORTED_REGION"
+            print(f"[i] {why} set \u2014 continuing; the service is authoritative if the snapshot is stale.", file=sys.stderr)
+        else:
+            print( "    Options: (a) set REDTEAM_ALLOW_UNSUPPORTED_REGION=1 if the live doc lists this region,", file=sys.stderr)
+            print( "             (b) deploy a separate Foundry project in a supported region for red-team only,", file=sys.stderr)
+            print( "             (c) run PyRIT-in-CI fallback (foundry-guardrails/scripts/redteam.yml).", file=sys.stderr)
+            return 3
 
     preflight_role(
         scope=args.project_scope, role="Foundry User",

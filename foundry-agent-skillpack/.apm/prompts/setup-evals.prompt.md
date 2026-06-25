@@ -88,7 +88,8 @@ python .agents/skills/foundry-evals/scripts/ensure_redteam.py \
   --dry-run
 ```
 
-The wrapper hard-fails preflight with the supported region list if the project's region is unsupported. In that case, fall back to PyRIT-in-CI — see [foundry-guardrails/redteam-evals.md](../skills/foundry-guardrails/redteam-evals.md).
+The wrapper checks the project's region against a cached red-team region snapshot (advisory — the
+list churns; the live [evaluation region-support doc](https://learn.microsoft.com/azure/ai-foundry/concepts/evaluation-regions-limits-virtual-network) and the service are authoritative). `--dry-run` and `REDTEAM_ALLOW_UNSUPPORTED_REGION=1` bypass the gate. Note this applies to **red-team + risk/safety evaluators only** — continuous/scheduled quality evals run broadly (incl. `westus`). If red-team truly isn't available, fall back to PyRIT-in-CI — see [foundry-guardrails/redteam-evals.md](../skills/foundry-guardrails/redteam-evals.md).
 
 ## Step 5 — Verify
 

@@ -25,9 +25,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
+# NOTE: yaml + azure-ai-projects + azure-identity are imported lazily inside the
+# functions that need them (load_capabilities / get_project_client) so that the
+# no-mutation paths (--dry-run and the role preflight) run without the SDK
+# installed, matching the deferred-import contract in the ensure_* scripts.
 
 # Built-in evaluator IDs we know about as of 2026-05-14.
 # When azure-ai-projects ships new ones, add them here AND in evaluator-catalog.md.
@@ -53,12 +54,15 @@ def load_capabilities(agent_path: str) -> dict[str, Any]:
     p = Path(agent_path) / "agent-capabilities.yaml"
     if not p.exists():
         return {}
+    import yaml  # lazy: only needed when an agent-capabilities.yaml is present
     with p.open() as fh:
         return yaml.safe_load(fh) or {}
 
 
-def get_project_client(endpoint: str) -> AIProjectClient:
+def get_project_client(endpoint: str):
     """Create an AIProjectClient using DefaultAzureCredential."""
+    from azure.ai.projects import AIProjectClient  # lazy: SDK only on mutate path
+    from azure.identity import DefaultAzureCredential
     return AIProjectClient(endpoint=endpoint, credential=DefaultAzureCredential())
 
 

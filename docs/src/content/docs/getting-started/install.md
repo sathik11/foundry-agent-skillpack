@@ -42,6 +42,13 @@ For the eval / DLP wrappers, also:
 pip install "azure-ai-projects>=2.0.0,<3" azure-identity pyyaml httpx
 ```
 
+:::note[No MCP server required]
+The slash commands run on **scripts + the Foundry SDK** — you do **not** need any MCP server.
+A few control-plane commands accept an *optional* `azure` / `foundry` MCP fallback for SDK-less
+ad-hoc use; that is opt-in and documented separately in
+[Reference → Optional MCP fallback](/reference/mcp-fallback/).
+:::
+
 ### Verify everything in one go
 
 ```bash

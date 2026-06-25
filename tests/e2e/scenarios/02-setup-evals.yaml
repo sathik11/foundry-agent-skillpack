@@ -1,0 +1,174 @@
+# Setup-evals smoke journey — scenario 02 (dry-run, NO mutation).
+#
+# Exercises the /setup-evals command path against the standing baseline project WITHOUT creating any
+# eval rules: every ensure_*_eval.py wrapper is driven with --dry-run, which prints the plan and
+# returns BEFORE any azure-ai-projects API call (and, after the F-N fix, before the SDK is even
+# imported). This makes the scenario safe to run repeatedly and cheap (no LLM-judge spend, no rules).
+#
+# What it proves:
+#   * preflight-role.sh resolves a SERVICE-PRINCIPAL caller (F-O fix) and confirms Foundry User on the
+#     project — under an SP login it previously degraded to "not logged in" / best-effort.
+#   * ensure_continuous_eval.py + ensure_scheduled_eval.py dry-run cleanly WITHOUT the SDK installed
+#     (F-N fix: _common.py imports azure-ai-projects lazily).
+#   * the manifest-driven evaluator selection (capabilities.evals.*) produces the expected plan.
+#
+# NOT exercised (deliberately): cloud red-team. ensure_redteam.py region-checks before the dry-run
+# return and the baseline project is in westus (unsupported → exit 3), so the manifest disables it
+# and the driver must not run it. See foundry-evals SUPPORTED_REGIONS.
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: setup-evals
+title: Setup evals dry-run (continuous + scheduled), no mutation
+recipe: .opencode/commands/setup-evals.md
+surfaces: [role_preflight_sp, continuous_eval_dryrun, scheduled_eval_dryrun, manifest_evaluator_select]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  project_scope: /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+
+prompt: |
+  You are the foundry-engineer. Configure evaluation rules for a Foundry agent named `smoke-evals`
+  using the skillpack's /setup-evals flow, but in SAFE DRY-RUN MODE ONLY — you must NOT create or
+  mutate any eval rule, dataset, schedule, or red-team scan. The skillpack is already installed into
+  this workspace (scripts under .agents/skills/, the foundry-engineer persona + commands under
+  .opencode/). You are already logged in to Azure as a service principal with the needed roles.
+
+  Confirmed target facts (do NOT rediscover, do NOT create/delete any infrastructure):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    region            = westus
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+    project_endpoint  = https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+    project_scope     = /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e
+    judge_model       = gpt-4o-mini   (the only deployed model — use it as the judge)
+
+  Steps:
+
+  1. SCAFFOLD a minimal agent folder agents/smoke-evals/ (you do NOT deploy it). Write
+     agents/smoke-evals/agent-capabilities.yaml declaring an evals block the wrappers can read:
+
+       schema_version: 1
+       agent_kind: hosted
+       deploy_mode: container
+       model:
+         deployment_name: gpt-4o-mini
+       target:
+         subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+         resource_group: agentskillpack-testbed-rg
+         foundry_account: ai-account-cnkboq4uixafy
+         foundry_project: ai-project-skillpack-e2e
+         project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+       capabilities:
+         evals:
+           role: orchestrator
+           continuous:
+             judge_model: gpt-4o-mini
+             sample_rate: 0.2
+           scheduled:
+             enabled: true
+             cron: "0 2 * * *"
+             timezone: UTC
+             dataset:
+               path: eval/regression-set.jsonl
+           redteam:
+             enabled: false
+         guardrails:
+           layers: [middleware]
+         toolbox:
+           enabled: false
+
+     Also create a tiny dataset file agents/smoke-evals/eval/regression-set.jsonl with 2 sample lines
+     (each a JSON object with a "query" and an "expected" field). It is only referenced by the
+     scheduled dry-run plan; it is NOT uploaded in dry-run.
+
+  2. PREFLIGHT (Step 0 of /setup-evals): run, capturing BOTH stdout and stderr to a log so the
+     verdict is recorded:
+
+       mkdir -p agents/smoke-evals/evals-out
+       bash .agents/skills/foundry-roles/scripts/preflight-role.sh \
+         "Foundry User" \
+         "/subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e" \
+         --action setup-evals --persona DevOps \
+         --why "Create continuous-eval rule for smoke-evals" \
+         > agents/smoke-evals/evals-out/preflight.log 2>&1
+     It should report the caller HAS 'Foundry User'.
+
+  3. CONTINUOUS eval (DRY-RUN). Capture combined stdout+stderr to a log:
+
+       python3 .agents/skills/foundry-evals/scripts/ensure_continuous_eval.py \
+         --project-endpoint https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e \
+         --project-scope    /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e \
+         --agent-name smoke-evals \
+         --agent-path agents/smoke-evals \
+         --judge-model gpt-4o-mini \
+         --dry-run \
+         > agents/smoke-evals/evals-out/continuous.log 2>&1
+     Confirm the log shows a Plan with eval_object `eval-smoke-evals` and ends with
+     "no API calls made".
+
+  4. SCHEDULED eval (DRY-RUN). Capture combined output:
+
+       python3 .agents/skills/foundry-evals/scripts/ensure_scheduled_eval.py \
+         --project-endpoint https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e \
+         --project-scope    /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e \
+         --agent-name smoke-evals \
+         --agent-path agents/smoke-evals \
+         --dry-run \
+         > agents/smoke-evals/evals-out/scheduled.log 2>&1
+     Confirm the log shows a Plan with schedule_name `scheduled-eval-smoke-evals` and ends with
+     "no API calls made".
+
+  5. DO NOT run ensure_redteam.py — the project is in westus, which is NOT a supported cloud
+     red-team region; the manifest sets redteam.enabled: false. Skip it.
+
+  Rules: --dry-run ONLY on every wrapper; never run any ensure_*_eval.py without --dry-run. Never
+  edit files under .agents/skills/ or apm_modules/ (the installed skillpack). Do not create, update,
+  or delete any Azure resource, eval rule, schedule, dataset, or agent. If a command fails, capture
+  the error and STOP — do not retry the same failing command more than twice or loop. End with a
+  short summary of the continuous + scheduled dry-run plans and the preflight verdict.
+
+budgets:
+  wall_clock: 900         # 15 min — no deploy, only script dry-runs + small file writes
+  no_progress: 360        # 6 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: agents/smoke-evals/agent-capabilities.yaml
+    desc: capabilities manifest scaffolded
+  - kind: file_contains
+    path: agents/smoke-evals/evals-out/preflight.log
+    contains: Foundry User
+    desc: preflight resolved the SP caller and evaluated the Foundry User role (F-O fix)
+  - kind: file_contains
+    path: agents/smoke-evals/evals-out/continuous.log
+    contains: eval-smoke-evals
+    desc: continuous-eval dry-run produced the expected eval object plan
+  - kind: file_contains
+    path: agents/smoke-evals/evals-out/continuous.log
+    contains: no API calls made
+    desc: continuous-eval ran in dry-run with no mutation (F-N fix — no SDK required)
+  - kind: file_contains
+    path: agents/smoke-evals/evals-out/scheduled.log
+    contains: scheduled-eval-smoke-evals
+    desc: scheduled-eval dry-run produced the expected schedule plan
+  - kind: file_contains
+    path: agents/smoke-evals/evals-out/scheduled.log
+    contains: no API calls made
+    desc: scheduled-eval ran in dry-run with no mutation
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; dry-run only
