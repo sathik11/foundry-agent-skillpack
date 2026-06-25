@@ -41,6 +41,16 @@ EXTRA_FLAGS=("$@")
 WORKSPACE_ROOT="$(pwd)"
 MANIFEST="$AGENT_PATH/agent-capabilities.yaml"
 AGENT_YAML="$AGENT_PATH/agent.yaml"
+# Prefer a dedicated AgentManifest file (agent.manifest.yaml) when present — that is the
+# schema `azd ai agent init --manifest` consumes. The agent-framework + langgraph-byo
+# templates ship it alongside the (informational) ContainerAgent agent.yaml. Falling back
+# to agent.yaml only when no manifest file exists keeps older single-file scaffolds working.
+MANIFEST_YAML="$AGENT_PATH/agent.manifest.yaml"
+if [[ -f "$MANIFEST_YAML" ]]; then
+  INIT_MANIFEST="$MANIFEST_YAML"
+else
+  INIT_MANIFEST="$AGENT_YAML"
+fi
 
 # --------------------------------------------------------------------------
 # 0. Read manifest (deploy_mode, model, location, code.*).
@@ -97,23 +107,23 @@ has_flag() {
 # 1. Schema validation (FB-15). agent.yaml must be AgentManifest shape
 #    (with a 'template:' wrapper) when we are going to pass --manifest.
 # --------------------------------------------------------------------------
-if [[ -f "$AGENT_YAML" ]]; then
+if [[ -f "$INIT_MANIFEST" ]]; then
   if command -v yq >/dev/null 2>&1; then
-    HAS_TEMPLATE="$(yq -r '.template // ""' "$AGENT_YAML" 2>/dev/null)"
-    KIND_TOP="$(yq -r '.kind // ""' "$AGENT_YAML" 2>/dev/null)"
+    HAS_TEMPLATE="$(yq -r '.template // ""' "$INIT_MANIFEST" 2>/dev/null)"
+    KIND_TOP="$(yq -r '.kind // ""' "$INIT_MANIFEST" 2>/dev/null)"
   else
     HAS_TEMPLATE="$(python3 -c "
 import yaml
-with open('$AGENT_YAML') as f: d = yaml.safe_load(f) or {}
+with open('$INIT_MANIFEST') as f: d = yaml.safe_load(f) or {}
 print(d.get('template') or '')" 2>/dev/null)"
     KIND_TOP="$(python3 -c "
 import yaml
-with open('$AGENT_YAML') as f: d = yaml.safe_load(f) or {}
+with open('$INIT_MANIFEST') as f: d = yaml.safe_load(f) or {}
 print(d.get('kind') or '')" 2>/dev/null)"
   fi
   if [[ -z "$HAS_TEMPLATE" && -n "$KIND_TOP" ]]; then
     {
-      echo "[x] $AGENT_YAML is ContainerAgent schema (top-level 'kind:'),"
+      echo "[x] $INIT_MANIFEST is ContainerAgent schema (top-level 'kind:'),"
       echo "    but \`azd ai agent init --manifest\` expects AgentManifest schema"
       echo "    (with a 'template:' wrapper)."
       echo
@@ -175,8 +185,8 @@ fi
 # --------------------------------------------------------------------------
 DERIVED_FLAGS=()
 
-if ! has_flag --manifest && [[ -f "$AGENT_YAML" ]]; then
-  DERIVED_FLAGS+=(--manifest "$AGENT_YAML")
+if ! has_flag --manifest && [[ -f "$INIT_MANIFEST" ]]; then
+  DERIVED_FLAGS+=(--manifest "$INIT_MANIFEST")
 fi
 if ! has_flag --src; then
   DERIVED_FLAGS+=(--src "$AGENT_PATH")
@@ -189,7 +199,15 @@ if ! has_flag --protocol; then
 fi
 if ! has_flag --location && [[ -n "$LOCATION" ]]; then
   # FB-20: pass project location explicitly so init doesn't infer from RG.
-  DERIVED_FLAGS+=(--location "$LOCATION")
+  # F-H (2026-06): `azd ai agent init` removed `--location` in azd.ai.agents >= 0.1.41.
+  # Only pass the flag if this azd build still accepts it; otherwise persist the location to
+  # the azd environment (where current builds read it from) so init doesn't prompt/misinfer.
+  if azd ai agent init --help 2>/dev/null | grep -q -- '--location'; then
+    DERIVED_FLAGS+=(--location "$LOCATION")
+  else
+    azd env set AZURE_LOCATION "$LOCATION" >/dev/null 2>&1 || true
+    echo "[i] azd ai agent init no longer takes --location; set AZURE_LOCATION=$LOCATION in azd env instead." >&2
+  fi
 fi
 
 # FB-21: fork on deploy_mode and pass code-specific flags.

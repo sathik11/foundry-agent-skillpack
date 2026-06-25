@@ -60,3 +60,8 @@ infra/.baseline-outputs.env
 
 # E2E test agents scaffolded by smoke runs
 agents/
+
+# azd init stray project dir (F-J) + azd state at repo root
+/smoke-greenfield/
+/azure.yaml
+/.azure/

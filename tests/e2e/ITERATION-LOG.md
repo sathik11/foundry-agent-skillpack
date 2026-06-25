@@ -86,3 +86,26 @@ blocked).
 ### Good signals
 - gpt-5.3-codex scaffolds fast + correctly wires the no-auth Learn MCP.
 - Agent honored "stop on first failure, don't loop" — clean failure, accurate root-cause report.
+
+## Run greenfield-deploy-2 + direct debug (2026-06-25) — 4 REAL skillpack issues found & fixed
+
+The smoke drove past scaffold into the real deploy preflight and surfaced a CHAIN of genuine
+skillpack bugs/gaps + CLI drift. Debugged directly (as the SP) for speed; all fixes in .apm source.
+
+| ID | Finding | Severity | Status |
+|---|---|---|---|
+| F-E | prepare-deploy requires ./assessment/project-topology.json from /assess-project. | high | FIXED (added assess step to journey) |
+| F-F | `read-topology.sh` `emit()` returns 1 on an absent optional field; under `set -e` this aborted the whole dump on the FIRST missing field → exit 1 despite valid topology. | bug | **FIXED** — emit() now `return 0`. |
+| F-G | agent-framework template shipped NO AgentManifest (`agent.manifest.yaml`) — only langgraph-byo had one — yet `safe-azd-init` requires AgentManifest for `--manifest`. Also safe-azd-init only ever read `agent.yaml`, never the sibling manifest file. | gap+bug | **FIXED** — added templates/agent.manifest.yaml.template; safe-azd-init now prefers agent.manifest.yaml (INIT_MANIFEST) for schema check + --manifest; scaffold.md file map updated. |
+| F-H | **CLI DRIFT (headline):** `azd ai agent init` removed `--location` in azd.ai.agents >= 0.1.41; safe-azd-init still passed it → `unknown flag: --location`. | drift | **FIXED** — safe-azd-init now probes `init --help` for `--location`; if absent, sets AZURE_LOCATION in the azd env instead. Drift-resilient. |
+| F-I | `prepare-deploy.sh` `run_stage()` captured `$?` AFTER a `2> >(tee…)` process substitution, clobbering it → every real stage failure reported `FAIL_EXIT_CODE=0` (masked root cause). | bug | **FIXED** — stderr to a plain file + tee afterwards so `$?` reflects the stage exactly. |
+| F-J | In the full pipeline, `azd ai agent init` errors `directory 'smoke-greenfield' already exists and is not empty` (azd init -t scaffolds a subdir conflicting with the existing agents/<name>/ scaffold). Standalone safe-azd-init succeeds; the sync-azd-env→safe-azd-init interaction triggers it. | high | **OPEN** — next iteration (azd init working-dir / --src semantics). |
+
+### Significance
+This is the core thesis of the project, proven on the live testbed: the autonomous E2E smoke
+**found 4 real skillpack defects + 1 real CLI drift**, and the guarded driver behaved correctly
+throughout (stopped cleanly on failures, no loops). F-H is exactly the SDK/CLI-drift class the
+twice-weekly watcher + fix loop is built to catch and auto-PR.
+
+After F-F/F-G/F-H fixes, `azd ai agent init` SUCCEEDS standalone (azure.yaml created). F-J (a
+pipeline-ordering interaction) is the remaining blocker before a full `azd up`.

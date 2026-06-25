@@ -80,14 +80,22 @@ run_stage() {
   # run_stage <name> <command...>
   local name="$1"; shift
   local kv_file="$KV_DIR/$name.kv"
+  local err_file="$KV_DIR/$name.stderr"
   echo "" >&2
   echo "──── $name ────" >&2
-  if "$@" >"$kv_file" 2> >(tee -a "$KV_DIR/stderr.log" >&2); then
+  # Capture the stage exit code RELIABLY. A previous version used
+  #   if "$@" 2> >(tee ...); then ... fi; local rc=$?
+  # but the process-substitution clobbers $? before `local rc=$?`, so a real
+  # non-zero stage was reported as FAIL_EXIT_CODE=0 (masking the true error).
+  # Use a plain stderr file + tee afterwards so $? reflects "$@" exactly.
+  "$@" >"$kv_file" 2>"$err_file"
+  local rc=$?
+  tee -a "$KV_DIR/stderr.log" < "$err_file" >&2
+  if [[ $rc -eq 0 ]]; then
     cat "$kv_file"          # forward this stage's KV to our stdout
     echo "STAGE_${name//-/_}=ok"
     return 0
   fi
-  local rc=$?
   cat "$kv_file"            # forward partial KV on failure too
   echo "STAGE_${name//-/_}=failed"
   echo "FAIL_STAGE=$name"

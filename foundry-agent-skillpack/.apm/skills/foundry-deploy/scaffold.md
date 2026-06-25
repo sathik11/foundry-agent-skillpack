@@ -14,7 +14,8 @@ Two template families:
 ```
 agents/<name>-v3/
 ├── Dockerfile           # python:3.12-slim, EXPOSE 8088, CMD python main.py
-├── agent.yaml           # Informational only (REST API is source of truth)
+├── agent.yaml           # ContainerAgent schema (informational — REST API is source of truth)
+├── agent.manifest.yaml  # AgentManifest schema — azd ai agent init -m (safe-azd-init passes --manifest)
 ├── main.py              # Agent + FoundryChatClient + ResponsesHostServer
 ├── requirements.txt     # agent-framework>=1.2.2, agent-framework-foundry-hosting==1.0.0a260429
 ├── tools.py             # @tool(approval_mode="never_require") functions
@@ -24,6 +25,7 @@ agents/<name>-v3/
 
 Templates live in [templates/](templates/):
 - [agent.yaml.template](templates/agent.yaml.template)
+- [agent.manifest.yaml.template](templates/agent.manifest.yaml.template)
 - [Dockerfile.template](templates/Dockerfile.template)
 - [main.py.template](templates/main.py.template)
 - [requirements.txt.template](templates/requirements.txt.template)
