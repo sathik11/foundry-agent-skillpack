@@ -216,3 +216,45 @@ python3 tests/e2e/harness.py --scenario tests/e2e/scenarios/02-setup-evals.yaml 
 ```
 
 Total real skillpack defects found by this smoke: **F-F, F-G, F-H, F-I, F-M, F-N, F-O** (7 fixed).
+
+## 2026-06-26 — Scenario 03 (configure-rbac) + three defects in the never-driven RBAC path (F-P/Q/R)
+
+Built the configure-rbac coverage (TD-38, PO's highest test priority). Like scenario 02 it runs in a
+**dry-run / read-only** tier — no role assignment is created — so it is safe + repeatable and does not
+need a deployed agent. To make `grant-rbac.sh` previewable I added a `--dry-run` / `--what-if` flag
+(mirrors `ensure_*_eval.py --dry-run`): it prints the Phase 1 + Phase 2 plan and exits before any
+`az role assignment create`, using a placeholder principal when no agent is deployed.
+
+Driving it directly against the live testbed surfaced a **chain of three genuine defects** in this
+command path (one of the six that had never been exercised):
+
+| ID | Finding | Status |
+|---|---|---|
+| F-P | `check-identities.sh` printed its `[+]`/`[!]` progress to **stdout**, but `grant-rbac.sh` consumes the script via `eval "$(...)"` — so those lines were eval'd as commands (would fail under `set -e`). The script's contract is "stdout = machine `KEY=value` only". | **FIXED** — progress lines routed to stderr; only the `PROJECT_MI=`/`AGENT_PRINCIPAL=` heredoc stays on stdout. |
+| F-Q | `azd ai agent show --name <not-yet-deployed>` writes a **non-JSON** banner to stdout; the `2>/dev/null \| jq` pipe parse-errored, and under `set -e` that aborted the whole script **before `PROJECT_MI` was ever emitted** — so identity discovery returned nothing at all for any not-yet-deployed agent. | **FIXED** — capture azd output first, `jq` only if valid, tolerate missing agent → empty principal. |
+| F-R | When discovery degraded (F-Q), `grant-rbac.sh` hit `[[ -z "$AGENT_PRINCIPAL" ]]` with the var **unbound** → `set -u` crash (`AGENT_PRINCIPAL: unbound variable`). | **FIXED** — defaulted `PROJECT_MI`/`AGENT_PRINCIPAL` to empty after the `eval`; dry-run falls back to a placeholder. |
+
+After the fixes, the live dry-run prints the complete, correct plan and the scenario's 7 assertions
+all match:
+```
+[+] Phase 1 — Image pull (Project MI)
+  - AcrPull @ acrskillpacke2e
+[+] Phase 2 — Runtime (per-agent identity)
+  - 53ca6127-db72-4b80-b1b0-d745d6d5456d @ ai-account-cnkboq4uixafy   (Foundry User)
+  - 53ca6127-db72-4b80-b1b0-d745d6d5456d @ ai-project-skillpack-e2e    (Foundry User)
+  - Cognitive Services OpenAI User @ ai-account-cnkboq4uixafy
+  - Cognitive Services User @ ai-account-cnkboq4uixafy
+[dry-run] Plan only — no role assignments created.
+```
+`check-identities.sh` stdout is now clean: `PROJECT_MI=<guid>` + `AGENT_PRINCIPAL=` (empty).
+
+Run it:
+```
+python3 tests/e2e/harness.py --scenario tests/e2e/scenarios/03-configure-rbac.yaml --clean-workspace
+```
+
+**Still open (TD-38 live tier):** actual `az role assignment create`, idempotent re-run, a dependent
+operation succeeding because of the grant, and teardown of test-only assignments — gated on a deployed
+agent principal (the greenfield deploy).
+
+Total real skillpack defects found by these smokes: **F-F, F-G, F-H, F-I, F-M, F-N, F-O, F-P, F-Q, F-R** (10 fixed).

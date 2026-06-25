@@ -1,0 +1,156 @@
+# Configure-RBAC smoke journey — scenario 03 (dry-run / read-only, NO mutation).
+#
+# Exercises the /configure-rbac Phase 1 + Phase 2 path against the standing baseline project WITHOUT
+# creating any role assignments. It proves the identity-resolution + grant-PLAN slice that sits under
+# every other agent scenario (eval-rule binding, capability-host data-plane roles, agent MI) — TD-38.
+#
+# What it proves:
+#   * check-identities.sh resolves the project system-assigned MI (read-only ARM GET) and reports the
+#     per-agent identity state. Its human/progress lines go to STDERR so `eval "$(check-identities.sh)"`
+#     in grant-rbac.sh only consumes the KEY=value machine output (latent eval-safety bug fixed: F-P).
+#   * grant-rbac.sh --dry-run prints the full Phase 1 (AcrPull on Project MI) + Phase 2 (Foundry User ×2,
+#     OpenAI User, Cognitive Services User on the per-agent identity) PLAN and exits with NO
+#     `az role assignment create` call, and WITHOUT requiring a deployed agent (placeholder principal).
+#
+# NOT exercised (deliberately): live role-assignment create, idempotent re-run, and the dependent-op
+# proof. Those need a deployed agent principal (gated on the greenfield deploy) + teardown of test-only
+# assignments — they are the LIVE tier of TD-38, sequenced after scenario 01 reaches harness-only green.
+# Phase 3 capability grants are driven by the /configure-rbac prompt, not grant-rbac.sh, and are out of
+# scope here.
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: configure-rbac
+title: Configure-RBAC dry-run (Phase 1 + Phase 2 plan), no mutation
+recipe: .opencode/commands/configure-rbac.md
+surfaces: [identity_resolution, rbac_phase12_plan_dryrun, eval_safe_machine_output]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+
+prompt: |
+  You are the foundry-engineer. Preview the RBAC grants for a Foundry hosted agent named
+  `smoke-rbac` using the skillpack's /configure-rbac flow, but in SAFE DRY-RUN / READ-ONLY MODE ONLY —
+  you must NOT create, update, or delete any role assignment, identity, or Azure resource. The
+  skillpack is already installed into this workspace (scripts under .agents/skills/, the
+  foundry-engineer persona + commands under .opencode/). You are already logged in to Azure as a
+  service principal.
+
+  Confirmed target facts (do NOT rediscover the project; do NOT create/delete any infrastructure):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+
+  Steps:
+
+  1. SCAFFOLD a minimal agent folder agents/smoke-rbac/ (you do NOT deploy it). Write
+     agents/smoke-rbac/agent-capabilities.yaml with just enough for the manifest to be valid:
+
+       schema_version: 1
+       agent_kind: hosted
+       deploy_mode: container
+       model:
+         deployment_name: gpt-4o-mini
+       target:
+         subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+         resource_group: agentskillpack-testbed-rg
+         foundry_account: ai-account-cnkboq4uixafy
+         foundry_project: ai-project-skillpack-e2e
+       capabilities:
+         guardrails:
+           layers: [middleware]
+
+     mkdir -p agents/smoke-rbac/rbac-out
+
+  2. IDENTITY RESOLUTION (Step 1 of /configure-rbac). Run check-identities.sh, capturing BOTH stdout
+     and stderr to a log:
+
+       bash .agents/skills/foundry-identity/scripts/check-identities.sh \
+         d194e976-63c4-43c9-995a-5340d0daffb1 \
+         agentskillpack-testbed-rg \
+         ai-account-cnkboq4uixafy \
+         ai-project-skillpack-e2e \
+         smoke-rbac \
+         > agents/smoke-rbac/rbac-out/identities.log 2>&1
+     It should print a non-empty PROJECT_MI=<guid> line. The per-agent identity will be empty (no
+     agent deployed) — that is expected and fine.
+
+  3. DISCOVER the ACR name in the resource group (read-only) so the plan can name the AcrPull scope:
+
+       ACR=$(az acr list -g agentskillpack-testbed-rg --query '[0].name' -o tsv 2>/dev/null)
+       [ -z "$ACR" ] && ACR=acrskillpacke2e
+       echo "ACR=$ACR"
+
+  4. RBAC PLAN (DRY-RUN — Step 2 of /configure-rbac, Phase 1 + Phase 2). Run grant-rbac.sh with the
+     --dry-run flag, capturing combined output:
+
+       bash .agents/skills/foundry-identity/scripts/grant-rbac.sh \
+         d194e976-63c4-43c9-995a-5340d0daffb1 \
+         agentskillpack-testbed-rg \
+         ai-account-cnkboq4uixafy \
+         ai-project-skillpack-e2e \
+         "$ACR" \
+         smoke-rbac \
+         --dry-run \
+         > agents/smoke-rbac/rbac-out/plan.log 2>&1
+     Confirm the log lists the planned grants (AcrPull, the Foundry User role-definition GUID
+     53ca6127-db72-4b80-b1b0-d745d6d5456d at account + project scope, Cognitive Services OpenAI User,
+     Cognitive Services User) and ends with "Plan only — no role assignments created."
+
+  5. DO NOT run any grant without --dry-run. DO NOT run grant-cs-access.sh or any Phase 3 grant. DO
+     NOT create/update/delete any role assignment or resource.
+
+  Rules: --dry-run ONLY on grant-rbac.sh; never run it without --dry-run. Never edit files under
+  .agents/skills/ or apm_modules/ (the installed skillpack). Do not create, update, or delete any
+  Azure resource or role assignment. If a command fails, capture the error and STOP — do not retry the
+  same failing command more than twice or loop. End with a short summary of the resolved PROJECT_MI
+  state and the Phase 1 + Phase 2 grant plan.
+
+budgets:
+  wall_clock: 900         # 15 min — no deploy, read-only discovery + dry-run plan + small file writes
+  no_progress: 360        # 6 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: agents/smoke-rbac/agent-capabilities.yaml
+    desc: capabilities manifest scaffolded
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/identities.log
+    contains: PROJECT_MI=
+    desc: check-identities resolved the project MI and emitted clean KEY=value machine output (F-P)
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/plan.log
+    contains: AcrPull
+    desc: Phase 1 AcrPull grant appears in the dry-run plan
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/plan.log
+    contains: 53ca6127-db72-4b80-b1b0-d745d6d5456d
+    desc: Phase 2 Foundry User role-definition GUID grant planned (account + project scope)
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/plan.log
+    contains: Cognitive Services OpenAI User
+    desc: Phase 2 OpenAI User grant planned
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/plan.log
+    contains: Cognitive Services User
+    desc: Phase 2 Cognitive Services User grant planned
+  - kind: file_contains
+    path: agents/smoke-rbac/rbac-out/plan.log
+    contains: no role assignments created
+    desc: grant-rbac.sh ran in dry-run with no mutation
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; read-only / dry-run only

@@ -267,7 +267,7 @@ Current automated coverage in `tests/e2e/scenarios/`:
 | AI Search + scheduled eval | 04 | ❌ |
 | APIM-fronted MCP + RBAC + drift | 05 | ❌ |
 | Multi-agent orchestration | 06 | ❌ |
-| configure-rbac | (cmd) | ❌ → **this phase** (TD-38) |
+| configure-rbac | (cmd) | 🟡 `03-configure-rbac.yaml` (dry-run plan green; live grant tier TD-38) |
 | add-capability-host (lifecycle: create → verify → teardown) | (cmd) | ❌ → **this phase** (TD-39) |
 | Observability live — LangGraph agent (trigger + confirm traces) | 01 | ❌ → **this phase** (TD-35/TD-37) |
 | setup-purview · publish-teams · audit-drift | (cmds) | ❌ → next phase |

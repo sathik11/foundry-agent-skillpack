@@ -22,6 +22,11 @@ matters. Format follows [Keep a Changelog](https://keepachangelog.com/); version
   region-limited; batch/quality evals (continuous + scheduled) are broadly available incl.
   `westus`. Red-team region check is now **advisory** (bypass via `--dry-run` or
   `REDTEAM_ALLOW_UNSUPPORTED_REGION=1`); region set refreshed (adds `australiaeast`).
+- **`/configure-rbac` path (previously never exercised):** `check-identities.sh` now emits only
+  `KEY=value` machine output on stdout (progress moved to stderr) so the `eval` in `grant-rbac.sh`
+  is safe; the per-agent identity lookup tolerates a not-yet-deployed agent (no more `jq` parse
+  abort that also swallowed `PROJECT_MI`); and `grant-rbac.sh` no longer crashes on an unbound
+  variable when discovery is partial.
 
 ### Added
 - `maintenance/AUTOMATION.md` — maintainer map of the two automation tracks, slash-command
@@ -31,6 +36,9 @@ matters. Format follows [Keep a Changelog](https://keepachangelog.com/); version
 - Tester-track CI (`.github/workflows/e2e-test.yml`) with **mandatory Foundry resource teardown**
   on every outcome; rolling **triage issue** so new features/recipes/scenarios reach the PO
   without blocking the scheduled watcher.
+- **`grant-rbac.sh --dry-run`** (a.k.a. `--what-if`) prints the Phase 1 + Phase 2 role-grant plan
+  with no `az role assignment create` call — enabling a safe, repeatable RBAC scenario
+  (`tests/e2e/scenarios/03-configure-rbac.yaml`, TD-38) without a deployed agent.
 
 ### Changed
 - Docs site is now **release-gated** — published after a package release (or manual dispatch),

@@ -909,6 +909,16 @@ succeeding. Teardown removes any test-only assignments.
 **Why now:** it gates the trustworthiness of every other live scenario — an unverified RBAC step
 means an eval/observability/capability-host pass could be silently relying on pre-existing grants.
 
+**Progress (2026-06-26):** dry-run tier landed + verified live on the testbed.
+`tests/e2e/scenarios/03-configure-rbac.yaml` drives `check-identities.sh` (read-only) +
+`grant-rbac.sh --dry-run` (new preview flag) and asserts the full Phase 1 + Phase 2 plan with no
+mutation. Building it surfaced + fixed three real defects in this never-exercised path: **F-P**
+(check-identities progress on stdout corrupted the `eval` contract — moved to stderr), **F-Q**
+(`azd ai agent show` non-JSON output on a not-yet-deployed agent caused a `jq` abort under `set -e`
+that also swallowed `PROJECT_MI` — now tolerant), **F-R** (`grant-rbac.sh` crashed on an unbound
+`AGENT_PRINCIPAL` after partial discovery — now guarded). **Still open:** the LIVE grant tier
+(actual `az role assignment create`, idempotent re-run, dependent-op proof, teardown) — gated on a
+deployed agent principal from the greenfield deploy.
 **Cross-refs:** TD-35/TD-39 (both depend on correct data-plane grants), `foundry-roles` preflight
 (F-O SP-identity fix), `maintenance/AUTOMATION.md` §6.
 

@@ -5,10 +5,24 @@
 #   foundry-fabric (print-only today — TD-1)
 #
 # Usage:
-#   ./grant-rbac.sh <subscription_id> <rg> <foundry_account> <project> <acr_name> <agent_name>
+#   ./grant-rbac.sh <subscription_id> <rg> <foundry_account> <project> <acr_name> <agent_name> [--dry-run]
+#
+# --dry-run / --what-if: print the planned Phase 1 + Phase 2 grants (role @ scope) and exit WITHOUT
+# calling `az role assignment create` — mirrors ensure_*_eval.py --dry-run. Safe + repeatable, and
+# does not require a deployed agent identity (a placeholder principal is used for the plan).
 set -euo pipefail
 
-SUB="${1:?usage: $0 <sub> <rg> <account> <project> <acr> <agent>}"
+DRY_RUN=0
+_ARGS=()
+for _a in "$@"; do
+  case "$_a" in
+    --dry-run|--what-if) DRY_RUN=1 ;;
+    *) _ARGS+=("$_a") ;;
+  esac
+done
+set -- "${_ARGS[@]+"${_ARGS[@]}"}"
+
+SUB="${1:?usage: $0 <sub> <rg> <account> <project> <acr> <agent> [--dry-run]}"
 RG="${2:?}"
 ACCOUNT="${3:?}"
 PROJECT="${4:?}"
@@ -19,15 +33,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Discover identities
 eval "$("$SCRIPT_DIR/check-identities.sh" "$SUB" "$RG" "$ACCOUNT" "$PROJECT" "$AGENT")"
+# `eval` may set neither var if discovery degraded; keep `set -u` happy.
+PROJECT_MI="${PROJECT_MI:-}"
+AGENT_PRINCIPAL="${AGENT_PRINCIPAL:-}"
 
 if [[ -z "$AGENT_PRINCIPAL" ]]; then
-  echo "[x] Agent identity not yet created. Run 'azd up' first." >&2
-  exit 1
+  if [[ "$DRY_RUN" == "1" ]]; then
+    AGENT_PRINCIPAL="<agent-principal-pending-deploy>"
+    echo "[dry-run] No deployed agent identity yet — using a placeholder principal for the plan." >&2
+  else
+    echo "[x] Agent identity not yet created. Run 'azd up' first." >&2
+    exit 1
+  fi
 fi
 
 ACCOUNT_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.CognitiveServices/accounts/$ACCOUNT"
 PROJECT_ID="$ACCOUNT_ID/projects/$PROJECT"
-ACR_ID=$(az acr show -n "$ACR" -g "$RG" --query id -o tsv)
+if [[ "$DRY_RUN" == "1" ]]; then
+  ACR_ID=$(az acr show -n "$ACR" -g "$RG" --query id -o tsv 2>/dev/null) \
+    || ACR_ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.ContainerRegistry/registries/$ACR"
+else
+  ACR_ID=$(az acr show -n "$ACR" -g "$RG" --query id -o tsv)
+fi
 
 grant() {
   local principal="$1" role="$2" scope="$3"
@@ -36,6 +63,9 @@ grant() {
   # Learn explicitly recommends "use the role definition ID (GUID) instead of
   # the role name in your code to avoid issues during the rename rollout".
   echo "  - $role @ $(basename "$scope")"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    return 0
+  fi
   az role assignment create \
     --assignee-object-id "$principal" \
     --assignee-principal-type ServicePrincipal \
@@ -60,6 +90,12 @@ grant "$AGENT_PRINCIPAL" "$ROLE_FOUNDRY_USER"              "$ACCOUNT_ID"
 grant "$AGENT_PRINCIPAL" "$ROLE_FOUNDRY_USER"              "$PROJECT_ID"
 grant "$AGENT_PRINCIPAL" "Cognitive Services OpenAI User"  "$ACCOUNT_ID"
 grant "$AGENT_PRINCIPAL" "Cognitive Services User"         "$ACCOUNT_ID"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo
+  echo "[dry-run] Plan only — no role assignments created."
+  exit 0
+fi
 
 echo
 echo "[+] Done. Allow 5-15 min for propagation."
