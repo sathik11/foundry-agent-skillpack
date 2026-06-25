@@ -33,6 +33,22 @@ here/as TDs but do **not** ride the scheduled watcher — they go dev → tester
 - **TD-37 — LangGraph recipe-tester scenario.** Executable `tests/e2e` scenario for the
   `langgraph-chat-sample` fixture; the test vehicle that closes TD-35 (LangGraph observability/eval).
 
+### Test coverage — this phase (product-owner direction, 2026-06-26)
+
+The tester track (`e2e-test.yml`) must move these from "documented" to "verified" (AUTOMATION.md §6).
+
+- **TD-38 — configure-rbac scenario (highest priority).** Role/identity grants underpin every other
+  scenario and component; exercise across the agent scenarios, not in isolation.
+- **TD-35 + TD-37 — LangGraph observability, live.** Deploy the fixture, trigger the agent, and
+  confirm real traces in the Agent Monitoring Dashboard + App Insights (no dry-run). Essential for
+  the LangGraph runtime.
+- **TD-39 — add-capability-host lifecycle scenario.** Dedicated, manually-dispatched, self-tearing
+  (Cosmos + AI Search + APIM). Capability host is removable via DELETE + recreate — no need to
+  destroy the project to re-test.
+
+**Next phase (deferred):** setup-purview, publish-teams, audit-drift coverage. `troubleshoot` is
+diagnostic-only and folds into the above via synthetic symptoms.
+
 ### v0.24 — AGT integration headline + cross-OS bake-off (research)
 
 - **TD-29 (ship):** First-class AGT integration. `runtime_governance: agt` key in `agent-capabilities.yaml`; `/prepare-deploy` injects `agent-governance-toolkit[full]` into the agent's container `requirements.txt`; templates wrap declared tools with `govern(...)`; eval rules cross-link AGT decisions via OTel `evaluator.agt.*` spans; `/audit-drift` reconciles declared policy file against the deployed container; `foundry-guardrails` skill gains a real Layer 0 section.

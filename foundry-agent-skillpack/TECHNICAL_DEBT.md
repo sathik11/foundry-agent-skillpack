@@ -841,6 +841,11 @@ The prompt grew a new Step 2.5 ("Confirm RBAC posture") that explains the load-b
 
 **Why deferred:** needs a live testbed run against the LangGraph fixture and is gated on the tester-track e2e harness maturing (see automation tracks doc). Human-reviewed item — revisit when LangGraph appears in a real consumer install or when the e2e harness can host non-native fixtures.
 
+**Priority (2026-06-26, PO direction):** promoted to **this phase**. The live observability proof —
+trigger the agent and confirm real traces in the Agent Monitoring Dashboard + App Insights — is
+essential for the LangGraph runtime and is no longer indefinitely deferred. Paired with TD-37 (the
+scenario vehicle) and gated only on the tester-track secrets/approval being wired.
+
 **Cross-refs:** TD-8 (preview SDK surface drift on the eval APIs this would exercise), TD-9 (red-team region gating the scan in (c) must respect), `maintenance/foundry-dependency-map.md` stages [6]/[7].
 
 ## TD-36 — Rubric evaluator support (OPEN — triage intake, human-gated)
@@ -878,3 +883,60 @@ mandatory teardown); TD-35 assertions (a)/(b)/(c) become checkable from it.
 **Why deferred:** gated on the tester-track CI (`e2e-test.yml`, just added) getting its testbed
 secrets + protected-env approval wired, and on the harness supporting non-native fixtures. Human-
 reviewed; sequence after the first green native scenario run.
+
+**Priority (2026-06-26, PO direction):** **this phase**, paired with TD-35 — this is the executable
+vehicle that makes TD-35's live observability assertions checkable.
+
+## TD-38 — configure-rbac scenario (OPEN — this phase, highest test priority)
+
+**Source:** product-owner direction 2026-06-26. `/configure-rbac` is the only never-driven command
+that sits *under* every other scenario — the role/identity grants it issues are what make eval-rule
+binding, capability-host data-plane access, and the agent managed identity work at all. Today it is
+"documented but unverified" (AUTOMATION.md §6).
+
+**What:** Add a tester-track scenario that exercises `/configure-rbac` against the testbed across the
+agent components it touches — agent MI → model deployment, project MI → Cosmos/AI Search/Storage
+data-plane roles, caller → Foundry account. Assert each role assignment lands at the correct scope
+(idempotent re-run = no-op) and that a downstream component (e.g. an eval rule or a hosted-agent
+invoke) succeeds *because* the grant is present. Test it **inside** the agent scenarios, not in
+isolation, so the role→capability linkage is what's proven.
+
+**Acceptance (to close):** scenario yaml lands; a green `e2e-test.yml` run that (a) creates the
+expected role assignments (verified via `az role assignment list --assignee <id> --scope <scope>`),
+(b) is idempotent on re-run, and (c) shows a dependent operation that was previously blocked now
+succeeding. Teardown removes any test-only assignments.
+
+**Why now:** it gates the trustworthiness of every other live scenario — an unverified RBAC step
+means an eval/observability/capability-host pass could be silently relying on pre-existing grants.
+
+**Cross-refs:** TD-35/TD-39 (both depend on correct data-plane grants), `foundry-roles` preflight
+(F-O SP-identity fix), `maintenance/AUTOMATION.md` §6.
+
+## TD-39 — add-capability-host lifecycle scenario (OPEN — this phase, dedicated + self-tearing)
+
+**Source:** product-owner direction 2026-06-26. `/add-capability-host` provisions BYO memory/thread/
+vector backing (Cosmos + AI Search + Storage, optionally APIM-fronted) and is the most expensive
+command to test — so it gets its own manually-dispatched scenario, not a slot in the cheap path.
+
+**Correction to the premise:** a capability host is **not** permanent. The API has no in-place
+UPDATE — a `PUT` over an existing host returns `409` — so the supported way to change bindings is
+**DELETE + recreate**, which `add-capability-host.sh --force-recreate` does (deletes, polls for
+completion, re-PUTs). Re-testing therefore does **not** require destroying the whole Foundry project;
+the full cost teardown simply deletes the project-scoped test resources (Cosmos/Search/APIM) that
+`infra/cleanup-sweep.sh` already tags as ephemeral.
+
+**What:** A dispatch-only scenario that (1) starts from a project with no capability host, (2) runs
+`/add-capability-host` to wire account→project hosts against freshly-provisioned (or dedicated)
+Cosmos + AI Search + Storage, (3) verifies the host resolves (agent memory/thread persists across a
+turn), (4) optionally exercises `--force-recreate` to prove the DELETE+recreate path, then (5) tears
+down all ephemeral backing resources via `cleanup-sweep.sh --apply`.
+
+**Acceptance (to close):** green dispatch run with capability-host GET returning the bound
+connections, a persisted-memory assertion across two turns, and a clean post-run sweep (no orphaned
+Cosmos/Search/APIM). Document the create→verify→(recreate)→teardown flow in the scenario.
+
+**Why dispatch-only:** provisioning Cosmos + AI Search + APIM is slow and billable; this must not run
+on the monthly cheap cron — it is a maintainer-initiated pre-release check.
+
+**Cross-refs:** `foundry-deploy/capability-host-bootstrap.md` (idempotency = DELETE+CREATE; `--force-recreate`),
+TD-38 (the project MI data-plane grants this host needs), `infra/cleanup-sweep.sh`.

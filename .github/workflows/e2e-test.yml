@@ -32,13 +32,24 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    # Safety net. A hung `azd up` or stuck driver must NOT ride the 6h GitHub default and leave
+    # billable Foundry resources running. On timeout the job is cancelled, but the teardown step
+    # (if: always()) still executes, so the testbed is always swept.
+    timeout-minutes: 120
     environment: e2e-testbed   # protected env → PO approval gate for live runs
     env:
+      # Two ways to authenticate the SP — pick ONE when you wire the repo (see comment on the login
+      # steps). Neither value lives in git; both are stored in GitHub Actions secrets.
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_RESOURCE_GROUP: ${{ secrets.E2E_RESOURCE_GROUP }}
-      # opencode backend token for the LLM driver (run_driver.py). Without it the harness
-      # cannot drive the /commands; the teardown step still runs via if: always().
-      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      # The opencode driver brain has NO static/enterprise key: opencode is free + open-source and
+      # authenticates to the Foundry driver model with a short-lived Azure AD token minted from the
+      # SP login below (see configure-opencode.sh). The only thing CI needs is the model endpoint.
+      # Override the built-in default account via the FOUNDRY_DRIVER_BASE_URL repo variable if the
+      # driver model lives on a different account; leave it unset to use the script default.
+      FOUNDRY_BASE_URL: ${{ vars.FOUNDRY_DRIVER_BASE_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,15 +58,40 @@ jobs:
           python-version: '3.12'
       - run: pip install pyyaml
 
-      - name: Azure login (OIDC)
+      - name: Azure login (service principal secret)
+        # PRIMARY path. AZURE_CREDENTIALS is the JSON blob from
+        #   az ad sp create-for-rbac --json-auth
+        # → { clientId, clientSecret, subscriptionId, tenantId }. The CLIENT SECRET lives inside
+        # this single secret. Store it under the protected `e2e-testbed` Environment secrets so it
+        # is only readable after the PO approves the run (Settings → Environments → e2e-testbed).
+        if: ${{ env.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure login (OIDC fallback — no stored secret)
+        # ALTERNATIVE path. No client secret anywhere: GitHub mints an OIDC token (id-token: write)
+        # that a FEDERATED CREDENTIAL on the App Registration trusts. If you go this way, add a
+        # federated credential scoped to `repo:<owner>/<repo>:environment:e2e-testbed` and leave
+        # AZURE_CREDENTIALS unset.
+        if: ${{ env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_ID != '' }}
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Install opencode driver CLI
+        run: npm install -g opencode-ai
+
+      # No API key here. configure-opencode.sh runs `az account get-access-token` (the SP we just
+      # logged in as has Cognitive Services User on the driver-model account) and writes that AAD
+      # token into ~/.config/opencode/opencode.json. Tokens are short-lived, so this is minted per run.
+      - name: Mint driver-model token (Azure AD, no static key)
+        run: bash tests/e2e/driver/configure-opencode.sh
+
       - name: Run scenario through the harness
         id: run
+        timeout-minutes: 80   # harness has its own wall-clock guardrail; this is the outer bound
         run: |
           python tests/e2e/harness.py \
             --scenario "${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}" \
@@ -67,6 +103,7 @@ jobs:
       # `azd-service-name` (the agent layer the harness creates).
       - name: Teardown Foundry ephemeral resources
         if: ${{ always() }}
+        timeout-minutes: 20
         run: |
           bash infra/cleanup-sweep.sh --apply
 

@@ -267,10 +267,39 @@ Current automated coverage in `tests/e2e/scenarios/`:
 | AI Search + scheduled eval | 04 | ❌ |
 | APIM-fronted MCP + RBAC + drift | 05 | ❌ |
 | Multi-agent orchestration | 06 | ❌ |
-| add-capability-host · configure-rbac · publish-teams · troubleshoot | (cmds) | ❌ |
+| configure-rbac | (cmd) | ❌ → **this phase** (TD-38) |
+| add-capability-host (lifecycle: create → verify → teardown) | (cmd) | ❌ → **this phase** (TD-39) |
+| Observability live — LangGraph agent (trigger + confirm traces) | 01 | ❌ → **this phase** (TD-35/TD-37) |
+| setup-purview · publish-teams · audit-drift | (cmds) | ❌ → next phase |
+| troubleshoot (diagnostic-only, synthetic symptoms) | (cmd) | ❌ → fold into above |
 
 Closing this table is the standing Track-2 backlog. Until a scenario is green here, its recipe
 is "documented but unverified."
+
+### Prioritization (product-owner direction, 2026-06-26)
+
+**This phase — must test:**
+
+- **configure-rbac** (TD-38) — highest priority. The identity/role grants underpin *every* other
+  scenario and component (eval-rule binding, capability-host data-plane roles, the agent MI). Tested
+  across the agent scenarios, not in isolation.
+- **Observability live — LangGraph** (TD-35 + TD-37) — **not a dry-run.** Deploy the
+  `langgraph-chat-sample` fixture, trigger the agent, and confirm real traces land in Foundry
+  observability (Agent Monitoring Dashboard + App Insights). Essential because LangGraph is the
+  second-most-likely customer runtime.
+- **add-capability-host lifecycle** (TD-39) — expensive (provisions Cosmos + AI Search + APIM), so a
+  dedicated, manually-dispatched scenario with its own teardown. **Correction:** a capability host
+  *can* be removed — the API has no in-place UPDATE, so the model is **DELETE + recreate**
+  (`add-capability-host.sh --force-recreate` deletes, polls, then re-PUTs). We do **not** need to
+  destroy the whole project to re-test; full cost teardown just deletes the project-scoped test
+  resources (Cosmos/Search/APIM) that `cleanup-sweep.sh` tags.
+
+**Next phase — deferred (tracked, not scheduled):** setup-purview, publish-teams, audit-drift.
+
+**`troubleshoot`** is diagnostic-only — it matches a symptom to a fix from the **foundry-failure-modes**
+catalog (F-01…F-24), plus a project-topology re-check and an App Insights KQL hook; **no Azure
+mutation.** Testable cheaply with synthetic symptoms asserting the right failure-mode id/fix, so it is
+folded into the configure-rbac / observability scenarios rather than getting its own live run.
 
 ---
 
