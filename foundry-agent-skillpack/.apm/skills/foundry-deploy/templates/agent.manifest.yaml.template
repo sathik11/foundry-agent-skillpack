@@ -23,7 +23,13 @@ template:
   environment_variables:
     # FOUNDRY_PROJECT_ENDPOINT and APPLICATIONINSIGHTS_CONNECTION_STRING are injected by the
     # platform (hosted) and translated by azd (local). Do NOT declare them here.
-    - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+    #
+    # IMPORTANT: the agent-framework main.py template reads os.environ["MODEL_DEPLOYMENT_NAME"]
+    # (see sdk-surface.md). Set THAT exact name here. The `{{...}}` is azd's manual-replace
+    # placeholder — /plan-agent Track B (or the deploy step) substitutes the concrete deployment
+    # name before `azd deploy`. A literal `{{...}}` left in agent.yaml makes the container fail
+    # /readiness (HTTP 424 session_not_ready). Verified end-to-end on the E2E testbed.
+    - name: MODEL_DEPLOYMENT_NAME
       value: "{{AZURE_AI_MODEL_DEPLOYMENT_NAME}}"
 resources:
   - kind: model

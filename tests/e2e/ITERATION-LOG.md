@@ -109,3 +109,32 @@ twice-weekly watcher + fix loop is built to catch and auto-PR.
 
 After F-F/F-G/F-H fixes, `azd ai agent init` SUCCEEDS standalone (azure.yaml created). F-J (a
 pipeline-ordering interaction) is the remaining blocker before a full `azd up`.
+
+## 2026-06-25 — ✅✅ FULL GREEN DEPLOY + VERIFY (real hosted agent on Azure)
+
+Drove the complete journey to a working deployed agent. Final verify: **HTTP 200**, agent answered
+"What is Azure AI Foundry?" correctly. Container built + pushed to ACR, hosted agent
+`smoke-greenfield:1` created and active in ai-project-skillpack-e2e.
+
+### Findings that unblocked it (all root-caused on the live testbed)
+
+| ID | Finding | Status |
+|---|---|---|
+| F-J | `azd ai agent init` creates a self-contained project subdir with its own `.git`; running inside the skillpack's git WORKTREE breaks azd's template git-staging (`pathspec '*' did not match`). Works in a clean non-git dir. | root-caused → F-K |
+| F-K | **E2E must run in a CLEAN non-git workspace** (also faithful to real usage: a user runs the skillpack in THEIR project, not inside the skillpack repo). Harness needs a workspace-setup step. | OPEN (harness design) |
+| F-L | `azd up` provisions at SUBSCRIPTION scope → fails for our deliberately RG-scoped SP. Since the baseline is standing, the agent layer must deploy with **`azd deploy`** (not `azd up`). Matches the hybrid infra model. Requires azd env: AZURE_AI_PROJECT_ID, FOUNDRY_PROJECT_ENDPOINT, USE_EXISTING_AI_PROJECT=true, etc. | **RESOLVED** (use azd deploy) |
+| F-M | Deployed container failed `/readiness` (HTTP 424 session_not_ready). Two causes: (1) azd's `{{AZURE_AI_MODEL_DEPLOYMENT_NAME}}` placeholder is a MANUAL-replace token, left literal in agent.yaml; (2) **env-var name mismatch**: agent-framework `main.py` reads `MODEL_DEPLOYMENT_NAME` but the AgentManifest (my F-G template, copied from langgraph-byo) set `AZURE_AI_MODEL_DEPLOYMENT_NAME`. Setting `MODEL_DEPLOYMENT_NAME=gpt-4o-mini` + redeploy → agent became ready → verify 200. | **FIXED in template** |
+
+### The deploy recipe (for the harness, F-K)
+1. Clean non-git workspace; apm-install skillpack (for .opencode commands + scripts).
+2. Scaffold agent-framework + Learn MCP + agent.manifest.yaml.
+3. `azd ai agent init -m agent.manifest.yaml --src agents/<name> --model-deployment <m> --protocol responses`.
+4. azd env set: AZURE_SUBSCRIPTION_ID, AZURE_LOCATION, AZURE_RESOURCE_GROUP, AZURE_AI_ACCOUNT_NAME,
+   AZURE_AI_PROJECT_NAME, AZURE_AI_PROJECT_ID, FOUNDRY_PROJECT_ENDPOINT, AZURE_AI_MODEL_DEPLOYMENT_NAME,
+   USE_EXISTING_AI_PROJECT=true, AZURE_PRINCIPAL_ID/TYPE.
+5. Resolve the `{{...}}` placeholder + ensure MODEL_DEPLOYMENT_NAME in agent.yaml.
+6. `azd deploy --no-prompt` (NOT azd up — RG-scoped SP).
+7. Verify: POST agents/<name>/endpoint/protocols/openai/responses?api-version=v1 with structured input → expect 200 + answer.
+
+Total real skillpack defects found by this smoke: **F-F, F-G, F-H, F-I, F-M** (5 fixed) + harness/azd
+design findings F-J/F-K/F-L. The autonomous E2E test has decisively proven its value.
