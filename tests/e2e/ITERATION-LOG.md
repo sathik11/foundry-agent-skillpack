@@ -70,3 +70,19 @@ assertions. F-C confirmed fixed by model choice (codex model is ~8x faster + act
 - Reserve gpt-5.4 (reasoning) for judgement-heavy scenarios.
 - Next milestones: extend this scenario to azd up + /verify-agent (real deploy), then add the
   brownfield + knowledge scenarios.
+
+## Run greenfield-deploy-1 (2026-06-25) — partial (real preflight gate found)
+
+Full-deploy journey (Learn MCP + azd up + verify), gpt-5.3-codex. Driver `completed` in 214s.
+Agent scaffolded all files with Learn MCP wired, ran prepare-deploy.sh, hit a REAL gate and STOPPED
+cleanly (no loop — guardrail-respecting behavior). Harness: 2/4 (scaffold + MCP pass; deploy/verify
+blocked).
+
+| ID | Finding | Severity | Status |
+|---|---|---|---|
+| F-D | azd up needs background+poll (bash 120s timeout + no events during long ops). | design | Built into the prompt (not yet exercised — blocked before deploy). |
+| F-E | `prepare-deploy.sh` hard-requires `./assessment/project-topology.json` from a prior `/assess-project`. The journey skipped it. Real, correct skillpack dependency the smoke surfaced. | high | **FIX:** add an assess-project.sh step (sub, rg, account, project) before prepare-deploy. |
+
+### Good signals
+- gpt-5.3-codex scaffolds fast + correctly wires the no-auth Learn MCP.
+- Agent honored "stop on first failure, don't loop" — clean failure, accurate root-cause report.

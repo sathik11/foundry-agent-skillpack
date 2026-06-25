@@ -1,23 +1,26 @@
-# Greenfield smoke journey — scenario 01 (iter-2).
+# Greenfield smoke journey — scenario 01 (full deploy + verify).
 #
-# DESIGN NOTE (finding F-B): the shipped /commands (e.g. /plan-agent) are built for an INTERACTIVE
-# Copilot session with Foundry MCP tools — they forbid shelling out and use picklists, so they do
-# not run cleanly headless. So the driver instead drives the shipped `foundry-engineer` AGENT
-# persona (which carries the same skill knowledge) with a CONCRETE, self-contained goal and the
-# target facts the interactive discovery steps would otherwise gather. First smoke milestone is the
-# headless-achievable slice: scaffold the agent-framework template + fill the manifest + run the
-# prepare-deploy preflight. azd up + verify follow once this is green.
+# Simple, concrete greenfield: agent-framework template + the PUBLIC, NO-AUTH Microsoft Learn MCP
+# tool (https://learn.microsoft.com/api/mcp), deployed for real (azd up) and verified.
+# Learn MCP chosen because it needs no API key / no auth (unlike a weather API).
+#
+# Driver: foundry-engineer agent on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+#
+# AZD-UP HANDLING (F-D): azd up runs ~10-15 min as one command. opencode's bash tool defaults to a
+# 120s timeout AND emits no events while a command is in flight (watchdog would false-kill). So the
+# prompt instructs the agent to run the long deploy in the BACKGROUND with a log + poll loop, which
+# (a) avoids the bash timeout, (b) keeps events flowing so the watchdog sees progress. Budgets are
+# also sized generously per infra/COSTS.md.
 
 id: greenfield
-title: Greenfield scaffold + preflight (foundry-engineer, headless)
+title: Greenfield full deploy + verify (Learn MCP, no-auth)
 recipe: foundry-agent-playbook/.apm/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md
-surfaces: [agent_framework_runtime, scaffold, prepare_deploy_preflight]
+surfaces: [agent_framework_runtime, public_mcp_learn, azd_up_deploy, verify]
 
 driver:
-  agent: foundry-engineer          # opencode --agent
+  agent: foundry-engineer
   model: foundry/gpt-5.3-codex
 
-# Concrete target facts (injected so the headless agent needs no interactive discovery / MCP).
 target:
   subscription: d194e976-63c4-43c9-995a-5340d0daffb1
   resource_group: agentskillpack-testbed-rg
@@ -28,9 +31,10 @@ target:
   model_deployment: gpt-4o-mini
 
 prompt: |
-  You are the foundry-engineer. Test the skillpack's greenfield scaffold path as a user would,
-  WORKING ONLY inside this repo. The Foundry baseline is ALREADY provisioned — do NOT create,
-  modify, or delete any Azure infrastructure. Use these CONFIRMED target facts (do not rediscover):
+  You are the foundry-engineer. Build, DEPLOY, and VERIFY a greenfield Foundry hosted agent end to
+  end, working inside this repo. The Foundry baseline is ALREADY provisioned — use it, do NOT create
+  or delete baseline infrastructure (project, search, cosmos, registry already exist). Confirmed
+  target facts (do NOT rediscover):
 
     subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
     resource_group    = agentskillpack-testbed-rg
@@ -40,45 +44,62 @@ prompt: |
     project_endpoint  = https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
     model_deployment  = gpt-4o-mini   (already deployed — use it; do NOT deploy a model)
 
-  Use the foundry-deploy skill's agent-framework template. Do exactly this:
+  You are already logged in to Azure as a service principal with the needed roles. Steps:
 
-  1. Create the agent folder `agents/smoke-greenfield/` by copying the agent-framework template
-     files from `foundry-agent-skillpack/.apm/skills/foundry-deploy/templates/` (Dockerfile,
-     agent.yaml, main.py, requirements.txt). Do NOT edit the template sources themselves.
-  2. Write `agents/smoke-greenfield/agent-capabilities.yaml` with schema_version 1, agent_kind
-     hosted, the `target:` block populated from the confirmed facts above, the model set to
-     gpt-4o-mini, guardrails layer `middleware`, and no knowledge sources.
-  3. Run the prepare-deploy PREFLIGHT only (validation gates) by executing the script
-     `foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/prepare-deploy.sh` against
-     `agents/smoke-greenfield` if it supports a preflight/dry-run, OR run the lighter validators
-     it calls (e.g. validate-azure-yaml.sh). Capture the output. Do NOT run `azd up` in this run.
+  1. SCAFFOLD agents/smoke-greenfield/ from the agent-framework template in
+     foundry-agent-skillpack/.apm/skills/foundry-deploy/templates/ (Dockerfile, agent.yaml, main.py,
+     requirements.txt). Do NOT edit the template sources.
+  2. Add the PUBLIC Microsoft Learn MCP tool (https://learn.microsoft.com/api/mcp — no auth) to
+     main.py by uncommenting/wiring the example MCP tool block already present in the template.
+  3. Write agents/smoke-greenfield/agent-capabilities.yaml: schema_version 1, agent_kind hosted,
+     deploy_mode container, target block from the facts above, model gpt-4o-mini, guardrails layer
+     middleware, one toolbox MCP source for Microsoft Learn (public, no auth), no knowledge sources.
+  4a. ASSESS: prepare-deploy requires a project topology file first. Run
+     foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/assess-project.sh \
+       d194e976-63c4-43c9-995a-5340d0daffb1 agentskillpack-testbed-rg \
+       ai-account-cnkboq4uixafy ai-project-skillpack-e2e
+     This writes ./assessment/project-topology.json. If it reports multiple candidates, use the
+     account/project facts above.
+  4. PREFLIGHT: run foundry-agent-skillpack/.apm/skills/foundry-deploy/scripts/prepare-deploy.sh
+     agents/smoke-greenfield and ensure it reports azd up is safe.
+  5. DEPLOY: initialize with the skillpack's safe-azd-init.sh, then run `azd up`. Because azd up
+     takes 10-15 minutes and the shell tool has a short default timeout, run it in the BACKGROUND:
+       nohup azd up --no-prompt > /tmp/azd-up.log 2>&1 &
+     then POLL /tmp/azd-up.log every ~60 seconds (tail it) until you see success or failure. Do NOT
+     block on a single foreground command for more than ~100 seconds. Set azd env values from the
+     confirmed facts (AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_LOCATION, the project) so
+     azd does not prompt.
+  6. VERIFY: once deployed, run /verify-agent equivalent — send a test query
+     "What is Azure AI Foundry?" to the deployed agent and confirm a non-empty answer. Stamp the
+     result into agents/smoke-greenfield/agent-status.json (deploy.status, verify.verdict) using the
+     skillpack's agent_status.py helper.
 
-  Rules: never edit files under `foundry-agent-skillpack/.apm/`. Do not provision/delete Azure
-  infra. If a command fails, capture the error and STOP — do not retry the same failing command
-  more than twice or loop. End by summarizing what you created and the preflight result.
+  Rules: never edit files under foundry-agent-skillpack/.apm/. Do not delete baseline infra. If a
+  command fails, capture the error and STOP — do not retry the same failing command more than twice
+  or loop. When polling a background job, tailing the log is progress, not a retry. End with a
+  summary of deploy + verify results.
 
 budgets:
-  wall_clock: 1800        # 30 min
-  no_progress: 600        # 10 min (scaffold + local validators; no long Azure ops in this slice)
-  loop_threshold: 3
+  wall_clock: 3600        # 60 min (full real deploy)
+  no_progress: 1500       # 25 min — covers the longest single op; the poll loop keeps events flowing
+  loop_threshold: 5       # higher: polling the same log tail is expected, not a loop
 
 assertions:
   - kind: path_exists
-    path: agents/smoke-greenfield/agent-capabilities.yaml
-    desc: manifest written
-  - kind: path_exists
     path: agents/smoke-greenfield/main.py
-    desc: agent-framework main.py scaffolded
-  - kind: path_exists
-    path: agents/smoke-greenfield/Dockerfile
-    desc: Dockerfile scaffolded
-  - kind: path_exists
-    path: agents/smoke-greenfield/requirements.txt
-    desc: requirements scaffolded
+    desc: agent scaffolded
   - kind: file_contains
-    path: agents/smoke-greenfield/agent-capabilities.yaml
-    contains: ai-project-skillpack-e2e
-    desc: manifest carries the confirmed project target
+    path: agents/smoke-greenfield/main.py
+    contains: learn.microsoft.com/api/mcp
+    desc: Learn MCP tool wired into the agent
+  - kind: agent_status
+    field: deploy.status
+    equals: succeeded
+    desc: azd up reported a successful deploy
+  - kind: agent_status
+    field: verify.verdict
+    equals: pass
+    desc: verify query returned a pass
 
 cleanup:
-  teardown_agents: false   # nothing deployed in this slice; scaffold is local (gitignored agents/)
+  teardown_agents: true    # remove the deployed ephemeral agent layer; baseline preserved
