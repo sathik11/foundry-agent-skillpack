@@ -80,11 +80,15 @@ echo "TOPOLOGY_VALID=true"
 echo "TOPOLOGY_FILE=$TOPOLOGY_FILE"
 
 emit() {
-  # emit <KEY> <jq-path>  — only echo if value is non-null/non-empty
+  # emit <KEY> <jq-path>  — only echo if value is non-null/non-empty.
+  # NOTE: must always return 0 — the script runs under `set -e`, and a bare
+  # `[[ -n "$value" ]] && echo` returns 1 when the field is absent, which would
+  # abort the whole dump on the first missing optional field.
   local key="$1" path="$2"
   local value
   value="$(jq -r "$path // empty" "$TOPOLOGY_FILE" 2>/dev/null || echo "")"
   [[ -n "$value" ]] && echo "${key}=${value}"
+  return 0
 }
 
 emit SUBSCRIPTION_ID    '.subscription_id'
