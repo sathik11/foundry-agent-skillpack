@@ -38,7 +38,7 @@ Installs `az` (≥ 2.80), `jq`, `azd` (≥ 1.24) + `azd ai agent` extension, Pyt
 
 **Windows:** native PowerShell / Git Bash are **not supported as of v0.23.0** — use **WSL2** (`wsl --install`, then run the one-liner inside WSL). Native Windows via dual bash + PowerShell-7 siblings is under evaluation — see [TD-28](./TECHNICAL_DEBT.md#td-28--cross-os-script-runtime--bash--pwsh-dual-script-bake-off).
 
-Full per-tool prerequisites table, why-each-is-needed, and the "verify everything" one-liner: [docs → install → prerequisites](https://foundry-agent-skillpack.example.com/getting-started/install/#prerequisites).
+Full per-tool prerequisites table, why-each-is-needed, and the "verify everything" one-liner: [docs → install → prerequisites](../docs/src/content/docs/getting-started/install.md#prerequisites).
 
 ## 2. Install
 
@@ -129,7 +129,7 @@ After `apm install`, you'll see (depending on your `targets:`):
     scripts/grant-fabric-workspace-role.sh   ← NEW (v0.21.0) operator-mode Fabric role grant
   …6 more skills…
 
-.github/prompts/                          ← 9 slash commands
+.github/prompts/                          ← 11 slash commands
   plan-agent.prompt.md
   prepare-deploy.prompt.md
   configure-rbac.prompt.md                   ← +post_publish input (v0.20.0)
@@ -139,6 +139,8 @@ After `apm install`, you'll see (depending on your `targets:`):
   publish-teams.prompt.md                    ← NEW (v0.20.0, TD-2)
   troubleshoot.prompt.md
   audit-drift.prompt.md                    ← read-only declared-vs-observed reconciler
+  add-capability-host.prompt.md            ← maintainer: provision capability-host data plane
+  assess-project.prompt.md                 ← maintainer: write project-topology.json
 
 .github/agents/foundry-engineer.agent.md  ← specialized persona
 ```
@@ -201,8 +203,8 @@ foundry-agent-skillpack/
 ├── README.md                          ← you are here
 ├── TECHNICAL_DEBT.md                  ← tracked limitations (TD-1..TD-19; TD-2 + TD-10 closed v0.20.0)
 └── .apm/                              ← SOURCE OF TRUTH — author here
-    ├── skills/                        ← 11 skills (router SKILL.md + sub-docs + scripts/)
-    ├── prompts/                       ← 9 slash commands
+    ├── skills/                        ← 15 skills (router SKILL.md + sub-docs + scripts/)
+    ├── prompts/                       ← 11 slash commands
     ├── agents/                        ← persona
     └── instructions/                  ← coding conventions
 ```
@@ -269,7 +271,7 @@ apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
 find . -maxdepth 4 -not -path '*/apm_modules/*' | sort
 ```
 
-You should see exactly 11 entries under `.agents/skills/` and 9 under `.github/prompts/`. Anything else means a stray file at the package root is being treated as a skill — fix and reinstall.
+You should see exactly 15 entries under `.agents/skills/` and 11 under `.github/prompts/`. Anything else means a stray file at the package root is being treated as a skill — fix and reinstall.
 
 ## Versioning
 

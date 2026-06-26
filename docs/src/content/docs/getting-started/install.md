@@ -141,7 +141,7 @@ After install you should see (depending on your `targets:`):
 
 ```
 .agents/skills/                          ← 16 skills (15 engineering + 1 playbook)
-.github/prompts/                         ← 9 slash commands
+.github/prompts/                         ← 11 slash commands
 .github/agents/                          ← 1 agent persona
 ```
 
@@ -149,7 +149,7 @@ After install you should see (depending on your `targets:`):
 
 ```bash
 ls .agents/skills | wc -l            # → 16
-ls .github/prompts | wc -l           # → 9
+ls .github/prompts | wc -l           # → 11
 ls .github/agents/                   # → foundry-engineer.agent.md
 ```
 
@@ -218,7 +218,7 @@ After `apm install`, your coding agent surfaces the prompts when you type `/` in
 
 | What you see | What it is | Source path (Copilot target) | Has inputs? |
 | --- | --- | --- | --- |
-| `/plan-agent`, `/prepare-deploy`, `/configure-rbac`, `/verify-agent`, `/setup-evals`, `/setup-purview`, `/publish-teams`, `/troubleshoot`, `/audit-drift` | **Prompts** (executable workflows) — the 9 slash commands this skillpack ships | `.github/prompts/*.prompt.md` | ✓ see [Reference → Prompts](/reference/prompts/) for the per-command table |
+| `/plan-agent`, `/prepare-deploy`, `/configure-rbac`, `/verify-agent`, `/setup-evals`, `/setup-purview`, `/publish-teams`, `/troubleshoot`, `/audit-drift` | **Prompts** (executable workflows) — the day-to-day slash commands this skillpack ships (plus two maintainer prompts, `/add-capability-host` + `/assess-project`, for **11** total) | `.github/prompts/*.prompt.md` | ✓ see [Reference → Prompts](/reference/prompts/) for the per-command table |
 | `/foundry-deploy`, `/foundry-identity`, `/foundry-roles`, `/foundry-knowledge`, `/foundry-guardrails`, `/foundry-purview`, `/foundry-fabric`, `/foundry-teams-workiq`, `/foundry-evals`, `/foundry-observability`, `/foundry-prod-readiness`, `/foundry-patterns`, `/foundry-multi-agent`, `/foundry-failure-modes`, `/foundry-skills` | **Skills** (knowledge corpus that prompts read) — surfaced by Copilot Chat under the same `/` autocomplete | `.github/instructions/*.instructions.md` | ✗ no inputs; selecting one loads the knowledge as context |
 | `/agents`, `/help`, etc. | Built-in client commands | n/a | varies |
 
