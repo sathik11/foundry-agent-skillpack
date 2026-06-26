@@ -1,0 +1,192 @@
+# Traces + evaluations availability journey — scenario 04 (full deploy + REAL traffic + REAL evals).
+#
+# This is the "verify the agent through triggering prompts and validating the availability of traces /
+# evaluations" smoke. Unlike 02 (which only dry-runs the eval wrappers), 04 actually:
+#   1. deploys an instrumented Learn-MCP agent (ENABLE_INSTRUMENTATION=true ships in the template),
+#   2. drives SEVERAL real queries that FORCE Microsoft Learn MCP tool calls (so `execute_tool` spans
+#      land in App Insights),
+#   3. creates a REAL continuous-eval rule via /setup-evals (no --dry-run; YES=1 for non-interactive),
+#   4. then the harness independently QUERIES AZURE — App Insights for trace spans, and the Foundry
+#      project for the eval rule + any eval runs — to PROVE traces/evaluations are available. The
+#      agent self-stamping agent-status.json is NOT trusted for the trace/eval half; the harness
+#      verifies it out-of-band (app_insights_trace / eval_rule_exists / eval_run_present probes).
+#
+# COST + CLEANUP: this is a real deploy AND a live eval rule. The eval rule is a DATA-PLANE object in
+# the Foundry project, NOT an ARM resource — infra/cleanup-sweep.sh (ARM-tag based) CANNOT see it. So
+# the e2e workflow must also run tests/e2e/teardown-evals.py for this scenario (continuous-eval-<agent>
+# + eval-<agent>) under `if: always()`, in addition to teardown_agents removing the deployed layer.
+#
+# EVAL-RUN TIMING (why eval_run_present is optional): the first continuous-eval run only fires AFTER a
+# sampled response, asynchronously — it may not have landed inside this run's wall_clock. So
+# eval_rule_exists (the rule we just created) is a FIRM check, while eval_run_present is best-effort
+# (optional: true → a skip/empty still passes). App Insights ingestion also lags a few minutes, which
+# is why the prompt sends queries early and the trace lookback is generous (1h).
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+# AZD-UP HANDLING (F-D): same background-deploy + poll pattern as scenario 01.
+
+id: traces-evals
+title: Traces + evals availability (deploy + real traffic + real continuous-eval)
+recipe: .agents/skills/foundry-agent-playbook/recipes/01-greenfield-quickstart.md
+surfaces: [agent_framework_runtime, public_mcp_learn, azd_up_deploy, instrumentation, continuous_eval_real, app_insights_traces]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  project_scope: /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+  # agent_name MUST equal the deployed agent's name — it becomes cloud_RoleName in App Insights and
+  # the suffix of the continuous-eval rule (continuous-eval-<agent_name>) + eval object (eval-<agent_name>).
+  agent_name: smoke-traces-evals
+  # app_insights: omit to let the harness discover the single App Insights component in the RG, or set
+  # to the component name / app-id GUID if the RG has more than one.
+
+prompt: |
+  You are the foundry-engineer. Build, DEPLOY, drive REAL TRAFFIC through, and attach a REAL
+  continuous-eval rule to a greenfield Foundry hosted agent end to end, working inside this repo. The
+  Foundry baseline is ALREADY provisioned — use it, do NOT create or delete baseline infrastructure
+  (project, search, cosmos, registry, App Insights already exist). The skillpack is already installed
+  into this workspace (scripts under .agents/skills/, commands + the foundry-engineer persona under
+  .opencode/). You are already logged in to Azure as a service principal with the needed roles.
+
+  Confirmed target facts (do NOT rediscover, do NOT create/delete baseline infra):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    region            = westus
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+    project_endpoint  = https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+    project_scope     = /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e
+    model_deployment  = gpt-4o-mini   (already deployed — use it; do NOT deploy a model)
+    agent_name        = smoke-traces-evals   (use EXACTLY this name everywhere)
+    judge_model       = gpt-4o-mini   (use as the eval judge)
+
+  Steps:
+
+  1. SCAFFOLD agents/smoke-traces-evals/ from the agent-framework template in
+     .agents/skills/foundry-deploy/templates/ (Dockerfile, agent.yaml, main.py, requirements.txt). Do
+     NOT edit the template sources. Keep the agent name `smoke-traces-evals` in agent.yaml and main.py.
+     The template's agent.yaml already sets ENABLE_INSTRUMENTATION: "true" — KEEP IT (traces depend on
+     it). Do not disable instrumentation.
+  2. Add the PUBLIC Microsoft Learn MCP tool (https://learn.microsoft.com/api/mcp — no auth) to main.py
+     by uncommenting/wiring the example MCP tool block already present in the template, with
+     approval_mode="never_require" so tool calls run unattended (every query that hits Learn produces
+     an `execute_tool` span). Instruct the agent (in INSTRUCTIONS) to ALWAYS use the Microsoft Learn
+     MCP tool to answer Azure/Microsoft questions.
+  3. Write agents/smoke-traces-evals/agent-capabilities.yaml: schema_version 1, agent_kind hosted,
+     deploy_mode container, target block from the facts above, model gpt-4o-mini, guardrails layer
+     middleware, one toolbox MCP source for Microsoft Learn (public, no auth), no knowledge sources,
+     and an evals block:
+       capabilities:
+         evals:
+           role: orchestrator
+           continuous:
+             judge_model: gpt-4o-mini
+             sample_rate: 1.0          # sample EVERY response so eval runs fire fast in this smoke
+           redteam:
+             enabled: false             # westus does not support cloud red-team
+  4a. ASSESS: run
+     .agents/skills/foundry-deploy/scripts/assess-project.sh \
+       d194e976-63c4-43c9-995a-5340d0daffb1 agentskillpack-testbed-rg \
+       ai-account-cnkboq4uixafy ai-project-skillpack-e2e
+     (writes ./assessment/project-topology.json; if multiple candidates, use the facts above).
+  4. PREFLIGHT: run .agents/skills/foundry-deploy/scripts/prepare-deploy.sh
+     agents/smoke-traces-evals and ensure it reports azd up is safe.
+  5. DEPLOY: initialize with the skillpack's safe-azd-init.sh, then run `azd up`. Because azd up takes
+     10-15 minutes and the shell tool has a short default timeout, run it in the BACKGROUND:
+       nohup azd up --no-prompt > /tmp/azd-up.log 2>&1 &
+     then POLL /tmp/azd-up.log every ~60 seconds (tail it) until you see success or failure. Do NOT
+     block on a single foreground command for more than ~100 seconds. Set azd env values from the
+     confirmed facts (AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_LOCATION, the project) so azd
+     does not prompt.
+  6. DRIVE REAL TRAFFIC (this is what produces trace spans): once deployed, send AT LEAST FIVE
+     separate queries to the deployed agent, each phrased so the agent MUST call the Microsoft Learn
+     MCP tool, e.g.:
+       - "Using Microsoft Learn, what is Azure AI Foundry?"
+       - "Look up on Microsoft Learn: what is a Foundry hosted agent?"
+       - "From Microsoft Learn, explain Azure AI Search."
+       - "Per Microsoft Learn, what is Microsoft Entra ID?"
+       - "Using Microsoft Learn, what is Azure Container Registry?"
+     Confirm each returns a non-empty answer. Send them with a short pause between (a couple seconds)
+     so distinct spans are recorded. These calls generate the `execute_tool` spans the harness will
+     later look for in App Insights.
+  7. ATTACH A REAL CONTINUOUS-EVAL RULE (NOT dry-run). First role-preflight, then run the wrapper
+     WITHOUT --dry-run, non-interactively (YES=1):
+       bash .agents/skills/foundry-roles/scripts/preflight-role.sh \
+         "Foundry User" \
+         "/subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e" \
+         --action setup-evals --persona DevOps \
+         --why "Create continuous-eval rule for smoke-traces-evals"
+       YES=1 python3 .agents/skills/foundry-evals/scripts/ensure_continuous_eval.py \
+         --project-endpoint https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e \
+         --project-scope    /subscriptions/d194e976-63c4-43c9-995a-5340d0daffb1/resourceGroups/agentskillpack-testbed-rg/providers/Microsoft.CognitiveServices/accounts/ai-account-cnkboq4uixafy/projects/ai-project-skillpack-e2e \
+         --agent-name smoke-traces-evals \
+         --agent-path agents/smoke-traces-evals \
+         --judge-model gpt-4o-mini \
+         > agents/smoke-traces-evals/evals-out/continuous.log 2>&1
+     Confirm the log ends with "Continuous-eval rule 'continuous-eval-smoke-traces-evals' is in place."
+     Do NOT run ensure_redteam.py (westus is unsupported; the manifest disables it).
+  8. STAMP RESULTS: write agents/smoke-traces-evals/agent-status.json via the skillpack's
+     agent_status.py helper with deploy.status=succeeded (once azd up succeeds), verify.verdict=pass
+     (queries returned answers), and an evals.continuous=created marker.
+
+  Rules: never edit files under .agents/skills/ or apm_modules/ (the installed skillpack). Do not
+  delete baseline infra. Use the agent name `smoke-traces-evals` EVERYWHERE. If a command fails,
+  capture the error and STOP — do not retry the same failing command more than twice or loop. When
+  polling a background job, tailing the log is progress, not a retry. End with a summary of deploy +
+  traffic + continuous-eval results.
+
+budgets:
+  wall_clock: 4200        # 70 min — real deploy + several real queries + real eval-rule create
+  no_progress: 1500       # 25 min — covers the longest single op; the poll loop keeps events flowing
+  loop_threshold: 6       # higher: polling the deploy log tail + sending several queries is expected
+
+assertions:
+  # --- artifact assertions (local, deterministic) ---
+  - kind: path_exists
+    path: agents/smoke-traces-evals/agent-capabilities.yaml
+    desc: capabilities manifest scaffolded (also anchors agent-status.json lookup)
+  - kind: file_contains
+    path: agents/smoke-traces-evals/main.py
+    contains: learn.microsoft.com/api/mcp
+    desc: Learn MCP tool wired into the agent (so queries emit execute_tool spans)
+  - kind: agent_status
+    field: deploy.status
+    equals: succeeded
+    desc: azd up reported a successful deploy
+  - kind: agent_status
+    field: verify.verdict
+    equals: pass
+    desc: the real queries returned answers
+  - kind: file_contains
+    path: agents/smoke-traces-evals/evals-out/continuous.log
+    contains: continuous-eval-smoke-traces-evals
+    desc: continuous-eval wrapper created the rule for real (no dry-run)
+  # --- Azure availability probes (out-of-band — the core of this scenario) ---
+  - kind: app_insights_trace
+    name_startswith: execute_tool
+    lookback: 1h
+    min_rows: 1
+    optional: true          # App Insights ingestion lags; a skip (no az/creds) or lag still passes
+    desc: App Insights has at least one execute_tool span for the agent (Learn MCP traffic landed)
+  - kind: eval_rule_exists
+    optional: true          # firm intent, but skip gracefully when SDK/creds absent on the runner
+    desc: the continuous-eval rule exists in the Foundry project
+  - kind: eval_run_present
+    min_runs: 1
+    optional: true          # first run is async after a sampled response; may not land in-window
+    desc: at least one eval run has fired for the agent's eval object (best-effort)
+
+cleanup:
+  teardown_agents: true     # remove the deployed ephemeral agent layer; baseline preserved
+  teardown_evals: true      # ALSO delete the data-plane continuous-eval rule + eval object (cleanup-
+                            # sweep.sh is ARM-only and cannot — the e2e workflow runs teardown-evals.py)

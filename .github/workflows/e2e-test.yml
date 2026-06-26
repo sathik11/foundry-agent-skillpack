@@ -15,7 +15,13 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Scenario yaml under tests/e2e/scenarios/'
+        description: >-
+          Scenario yaml under tests/e2e/scenarios/. Live (mutating, billable):
+          01-greenfield (deploy), 04-traces-evals (deploy + real traffic + real
+          continuous-eval rule). Dry-run / advisory (NO Azure mutation, read-only
+          at most): 02-setup-evals, 03-configure-rbac, 05-troubleshoot,
+          06-prepare-deploy, 07-audit-drift, 08-setup-purview. 04 also creates a
+          data-plane continuous-eval rule that the eval teardown step below removes.
         type: string
         default: tests/e2e/scenarios/01-greenfield.yaml
   schedule:
@@ -56,7 +62,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pyyaml
+      # pyyaml drives the harness; azure-ai-projects + azure-identity back the out-of-band Azure
+      # availability probes (eval_rule_exists / eval_run_present query the Foundry project SDK, and
+      # the App Insights trace probe resolves the component via az CLI). The probes degrade to SKIP
+      # when these are absent, so they are installed here to let scenario 04 actually verify them.
+      - run: pip install pyyaml azure-ai-projects azure-identity
 
       - name: Azure login (service principal secret)
         # PRIMARY path. AZURE_CREDENTIALS is the JSON blob from
@@ -96,6 +106,41 @@ jobs:
           python tests/e2e/harness.py \
             --scenario "${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}" \
             --clean-workspace --backend opencode --run-id "ci-${{ github.run_id }}"
+
+      # DATA-PLANE eval teardown — runs BEFORE the ARM sweep so the project still exists while we
+      # delete the rule. cleanup-sweep.sh is ARM-tag based and CANNOT see a continuous-eval rule /
+      # eval object (they live inside the Foundry project, not as ARM resources). Only scenarios that
+      # actually create one (cleanup.teardown_evals: true — i.e. 04-traces-evals) need this; for every
+      # other scenario the parse yields teardown_evals=false and the step is a logged no-op.
+      # teardown-evals.py is best-effort by design (it never hard-fails without --strict), so this is
+      # safe under if: always().
+      - name: Teardown data-plane continuous-eval rule
+        if: ${{ always() }}
+        timeout-minutes: 10
+        env:
+          SCENARIO: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+        run: |
+          python - "$SCENARIO" <<'PY'
+          import subprocess, sys, yaml
+          sc = yaml.safe_load(open(sys.argv[1]))
+          cleanup = sc.get("cleanup", {}) or {}
+          if not cleanup.get("teardown_evals"):
+              print(f"[teardown-evals] {sys.argv[1]}: teardown_evals not set — nothing to clean (no-op).")
+              raise SystemExit(0)
+          target = sc.get("target", {}) or {}
+          endpoint = target.get("project_endpoint")
+          agent = target.get("agent_name")
+          if not endpoint or not agent:
+              print("[teardown-evals] teardown_evals set but project_endpoint/agent_name missing — no-op.")
+              raise SystemExit(0)
+          # No --strict: a missing rule / preview-SDK rename / absent creds degrades to exit 0.
+          rc = subprocess.call([
+              "python", "tests/e2e/teardown-evals.py",
+              "--project-endpoint", endpoint,
+              "--agent-name", agent,
+          ])
+          raise SystemExit(rc)
+          PY
 
       # MANDATORY test-completion teardown. Runs on EVERY outcome (pass / fail / cancel) so a
       # failed or cancelled run never leaves billable Foundry agent resources behind. The standing

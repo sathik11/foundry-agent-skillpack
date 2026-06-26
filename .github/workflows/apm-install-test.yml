@@ -42,4 +42,14 @@ jobs:
           # Confirm both packages landed.
           test -d .agents/skills/foundry-deploy        || { echo "::error::skillpack skills missing"; exit 1; }
           test -d .agents/skills/foundry-agent-playbook || echo "::warning::playbook skill dir missing — non-fatal"
+          # EXACT-COUNT regression gate. The README / docs / TESTING.md all promise "15 skills + 11
+          # prompts" for the skillpack (+1 playbook skill = 16 dirs under .agents/skills total). A
+          # stray file at a package root, an accidental extra skill, or a dropped prompt would silently
+          # break that contract — so assert the exact counts here. Update these numbers (and the docs)
+          # deliberately whenever a skill or prompt is intentionally added or removed.
+          skill_count=$(find .agents/skills -mindepth 1 -maxdepth 1 -type d | wc -l)
+          prompt_count=$(find .github/prompts -maxdepth 1 -name '*.prompt.md' | wc -l)
+          echo "Installed: ${skill_count} skill dirs, ${prompt_count} prompts"
+          [ "$skill_count" -eq 16 ] || { echo "::error::expected 16 skill dirs (15 skillpack + 1 playbook), got ${skill_count}"; exit 1; }
+          [ "$prompt_count" -eq 11 ] || { echo "::error::expected 11 prompts, got ${prompt_count}"; exit 1; }
           apm audit || true

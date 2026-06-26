@@ -1,0 +1,104 @@
+# Audit-drift smoke journey — scenario 07 (read-only reconcile, NO mutation).
+#
+# /audit-drift is a hard-read-only declared-vs-observed reconciler: it walks every block in
+# agent-capabilities.yaml against the live world and emits a markdown delta report, stamping ONLY the
+# report file + the verify block of agent-status.json. By its own hard rule it makes no
+# `az role assignment create`, no `az rest post|put|delete`, no manifest edits, and passes --dry-run to
+# any wrapper that would mutate. This scenario exercises that reconcile loop + the report/stamp output.
+#
+# The audited agent is NOT actually deployed on the baseline, so most live-state rows will read
+# "❌ declared but no live <X>" / "⚠ unknown". That is the CORRECT behavior to assert: the value here
+# is proving the read-only walk + report + stamp run end to end WITHOUT mutating anything — not that a
+# real deployed agent is drift-free (that's what scenario 04 + a real /audit-drift would show).
+#
+# Reads live Foundry/Azure (Reader floor) but writes NOTHING to Azure. Safe to run repeatedly.
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: audit-drift
+title: Audit-drift read-only reconcile + report (no mutation)
+recipe: .opencode/commands/audit-drift.md
+surfaces: [readonly_reconcile, drift_report, agent_status_stamp, reader_floor]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+
+prompt: |
+  You are the foundry-engineer. Run the skillpack's /audit-drift read-only reconciliation against a
+  Foundry agent manifest. This prompt is HARD READ-ONLY: you must NOT create, update, or delete any
+  Azure / Foundry / Purview resource, must NOT edit agent-capabilities.yaml, and must pass --dry-run to
+  any wrapper that would otherwise mutate. The only writes allowed are (a) the markdown drift report,
+  (b) the `verify` block of agent-status.json. The Foundry baseline is ALREADY provisioned. The
+  skillpack is already installed (scripts under .agents/skills/, commands + the foundry-engineer
+  persona under .opencode/). You are already logged in to Azure as a service principal (Reader is
+  enough; Reader gaps degrade rows to "⚠ unknown", they do not stop the audit).
+
+  Confirmed target facts (do NOT rediscover, do NOT create/delete any infrastructure):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    region            = westus
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+    project_endpoint  = https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+    model_deployment  = gpt-4o-mini
+
+  Steps:
+
+  1. SCAFFOLD a minimal agent folder agents/smoke-audit/ (you do NOT deploy it). Write
+     agents/smoke-audit/agent-capabilities.yaml: schema_version 1, agent_kind hosted, deploy_mode
+     container, the target block from the facts above, model gpt-4o-mini, guardrails layer middleware,
+     toolbox with one Microsoft Learn MCP source (public, no auth), no knowledge sources, network class
+     public. Also seed a minimal agents/smoke-audit/agent-status.json via the skillpack's
+     agent_status.py init helper (agent-name smoke-audit, agent-kind hosted) so the audit has a status
+     file to cross-reference and stamp.
+  2. Run /audit-drift for agent_path=agents/smoke-audit, agent_name=smoke-audit, writing the report to
+     report_path=agents/smoke-audit/audit-out/drift.md (mkdir -p the directory). Walk the read-only
+     checks: caller Reader preflight, capability-hash drift check, identity cross-reference, and the
+     per-block walk (toolbox / guardrails / evals / network). Because smoke-audit is NOT deployed,
+     expect many rows to read "❌ declared but no live <X>" or "⚠ unknown" — that is EXPECTED and is
+     not a failure of the audit; record them in the report as-is.
+  3. The audit MUST end by (a) writing the markdown report to agents/smoke-audit/audit-out/drift.md
+     with a SUMMARY line (counts of ✅/⚠/❌), and (b) stamping the `verify` block of
+     agents/smoke-audit/agent-status.json with the audit summary (verify.last_audit_at +
+     verify.audit_summary) via agent_status.py update.
+
+  Rules: HARD READ-ONLY — no `az role assignment create`, no `az rest --method post|put|delete`, no
+  `mcp_*_create_*`/`_update_*`/`_delete_*`, no edits to agent-capabilities.yaml; pass --dry-run to any
+  ensure_*_eval.py if you call it. Never edit files under .agents/skills/ or apm_modules/ (the
+  installed skillpack). If a command fails, capture the error and STOP — do not retry the same failing
+  command more than twice or loop. End with the report SUMMARY + recommendations.
+
+budgets:
+  wall_clock: 1500        # 25 min — read-only walk across blocks + report compose
+  no_progress: 600        # 10 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: agents/smoke-audit/agent-capabilities.yaml
+    desc: capabilities manifest scaffolded (also anchors agent-status.json lookup)
+  - kind: path_exists
+    path: agents/smoke-audit/audit-out/drift.md
+    desc: read-only drift report written
+  - kind: file_contains
+    path: agents/smoke-audit/audit-out/drift.md
+    contains: SUMMARY
+    desc: report includes the ✅/⚠/❌ summary line
+  - kind: agent_status
+    field: verify.audit_summary.fail
+    exists: true
+    desc: the audit stamped a verify.audit_summary into agent-status.json
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; read-only reconcile only
