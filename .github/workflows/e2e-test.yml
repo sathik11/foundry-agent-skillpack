@@ -16,14 +16,31 @@ on:
     inputs:
       scenario:
         description: >-
-          Scenario yaml under tests/e2e/scenarios/. Live (mutating, billable):
-          01-greenfield (deploy), 04-traces-evals (deploy + real traffic + real
-          continuous-eval rule). Dry-run / advisory (NO Azure mutation, read-only
-          at most): 02-setup-evals, 03-configure-rbac, 05-troubleshoot,
-          06-prepare-deploy, 07-audit-drift, 08-setup-purview. 04 also creates a
-          data-plane continuous-eval rule that the eval teardown step below removes.
+          Single scenario yaml under tests/e2e/scenarios/ (ignored when
+          all_scenarios is true). Live (mutating, billable): 01-greenfield
+          (deploy), 04-traces-evals (deploy + real traffic + real continuous-eval
+          rule). Dry-run / advisory (NO Azure mutation, read-only at most):
+          02-setup-evals, 03-configure-rbac, 05-troubleshoot, 06-prepare-deploy,
+          07-audit-drift, 08-setup-purview. 04 also creates a data-plane
+          continuous-eval rule that the eval teardown step below removes.
         type: string
         default: tests/e2e/scenarios/01-greenfield.yaml
+      all_scenarios:
+        description: >-
+          Run EVERY scenario in tests/e2e/scenarios/ as a matrix (fan-out, one job
+          per scenario) instead of the single `scenario` above. The two billable
+          live scenarios (01, 04) are serialized to one-at-a-time; the rest run in
+          parallel. Use this for a full tester-track sweep.
+        type: boolean
+        default: false
+      include_billable:
+        description: >-
+          When all_scenarios is true, also run the billable live scenarios
+          (01-greenfield, 04-traces-evals). Leave OFF to sweep only the free
+          dry-run/read-only/offline/advisory scenarios first (recommended for the
+          first run — shakes out the harness without spending money).
+        type: boolean
+        default: false
   schedule:
     - cron: '0 8 1 * *'   # 1st of month 08:00 UTC — pre-release candidate run
 
@@ -37,8 +54,65 @@ concurrency:
   cancel-in-progress: false   # never cancel mid-run — teardown must complete
 
 jobs:
-  e2e:
+  # Resolve the scenario list ONCE, up front, so the live job can fan out over a matrix. Two modes:
+  #   - single  : the `scenario` input (or the schedule default) → a 1-element matrix.
+  #   - sweep   : every tests/e2e/scenarios/*.yaml → an N-element matrix. Billable scenarios (those
+  #               whose cleanup mutates Azure — 01-greenfield, 04-traces-evals) are tagged so the
+  #               live job can (a) optionally exclude them and (b) serialize them (max-parallel).
+  # This job needs no secrets and never touches Azure — it only reads the scenario files.
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        env:
+          ALL: ${{ inputs.all_scenarios }}
+          INCLUDE_BILLABLE: ${{ inputs.include_billable }}
+          SINGLE: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob, json, os, yaml
+
+          # A scenario is "billable" when running it mutates Azure. The honest signal already in the
+          # scenario is cleanup.teardown_agents / teardown_evals — if the harness has to tear DOWN a
+          # deployed agent or a data-plane eval rule, the run created billable infra. (Dry-run /
+          # read-only / advisory scenarios set neither.)
+          def billable(path):
+              c = (yaml.safe_load(open(path)) or {}).get("cleanup", {}) or {}
+              return bool(c.get("teardown_agents") or c.get("teardown_evals"))
+
+          all_mode = os.environ["ALL"] == "true"
+          include_billable = os.environ["INCLUDE_BILLABLE"] == "true"
+
+          if all_mode:
+              files = sorted(glob.glob("tests/e2e/scenarios/*.yaml"))
+              entries = [{"scenario": f, "billable": billable(f)} for f in files]
+              if not include_billable:
+                  entries = [e for e in entries if not e["billable"]]
+          else:
+              s = os.environ["SINGLE"]
+              entries = [{"scenario": s, "billable": billable(s)}]
+
+          # slug: a filesystem/issue-safe id per leg so artifacts + the rolling issue don't collide.
+          for e in entries:
+              e["slug"] = os.path.splitext(os.path.basename(e["scenario"]))[0]
+
+          print("matrix=" + json.dumps({"include": entries}))
+          PY
+      - run: echo "Resolved matrix → ${{ steps.build.outputs.matrix }}"
+
+  e2e:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one scenario's failure must not cancel the others in the sweep
+      # Serialize billable legs and keep total concurrency modest. The testbed is a single shared
+      # baseline; two live deploys at once would race on the same RG. 1 keeps it strictly serial when
+      # billable scenarios are present; the free legs are short, so the wall-clock cost is acceptable.
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     # Safety net. A hung `azd up` or stuck driver must NOT ride the 6h GitHub default and leave
     # billable Foundry resources running. On timeout the job is cancelled, but the teardown step
     # (if: always()) still executes, so the testbed is always swept.
@@ -105,8 +179,9 @@ jobs:
         timeout-minutes: 80   # harness has its own wall-clock guardrail; this is the outer bound
         run: |
           python tests/e2e/harness.py \
-            --scenario "${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}" \
-            --clean-workspace --backend opencode --run-id "ci-${{ github.run_id }}"
+            --scenario "${{ matrix.scenario }}" \
+            --clean-workspace --backend opencode \
+            --run-id "ci-${{ github.run_id }}-${{ matrix.slug }}"
 
       # DATA-PLANE eval teardown — runs BEFORE the ARM sweep so the project still exists while we
       # delete the rule. cleanup-sweep.sh is ARM-tag based and CANNOT see a continuous-eval rule /
@@ -119,7 +194,7 @@ jobs:
         if: ${{ always() }}
         timeout-minutes: 10
         env:
-          SCENARIO: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+          SCENARIO: ${{ matrix.scenario }}
         run: |
           python - "$SCENARIO" <<'PY'
           import subprocess, sys, yaml
@@ -165,32 +240,36 @@ jobs:
         if: ${{ always() && steps.run.outcome != 'success' }}
         uses: actions/github-script@v7
         env:
-          SCENARIO: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+          SCENARIO: ${{ matrix.scenario }}
+          SLUG: ${{ matrix.slug }}
           RUN_OUTCOME: ${{ steps.run.outcome }}
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
             const scenario = process.env.SCENARIO;
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const slug = process.env.SLUG;
+            const { owner, repo } = context.repo;
+            const repoUrl = `${context.serverUrl}/${owner}/${repo}`;
+            const runUrl = `${repoUrl}/actions/runs/${context.runId}`;
+            const blob = (p) => `${repoUrl}/blob/${context.ref.replace('refs/heads/', '')}/${p}`;
+            const artifactName = `e2e-run-${context.runId}-${slug}`;
 
-            // Find the harness-report.json the harness wrote for THIS run (ci-<run_id>). If the harness
-            // crashed before writing one, fall back to the newest report dir, then to "no report".
+            // Find the harness-report.json for THIS leg (ci-<run_id>-<slug>). If the harness crashed
+            // before writing one, fall back to the newest report dir, then to "no report".
             const artRoot = 'tests/e2e/artifacts';
-            let report = null, reportPath = null;
-            const preferred = path.join(artRoot, `ci-${context.runId}`, 'harness-report.json');
+            let report = null;
+            const preferred = path.join(artRoot, `ci-${context.runId}-${slug}`, 'harness-report.json');
             try {
               if (fs.existsSync(preferred)) {
                 report = JSON.parse(fs.readFileSync(preferred, 'utf8'));
-                reportPath = preferred;
               } else if (fs.existsSync(artRoot)) {
                 const dirs = fs.readdirSync(artRoot)
                   .map(d => path.join(artRoot, d, 'harness-report.json'))
                   .filter(p => fs.existsSync(p));
                 if (dirs.length) {
                   dirs.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-                  reportPath = dirs[0];
-                  report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+                  report = JSON.parse(fs.readFileSync(dirs[0], 'utf8'));
                 }
               }
             } catch (e) {
@@ -217,48 +296,51 @@ jobs:
               ].join('\n');
             }
 
-            const marker = '<!-- e2e-tester-rolling -->';
-            const title = '🧪 E2E tester-track findings (rolling)';
+            // ONE rolling issue PER SCENARIO (marker + title carry the slug). A full sweep fans out to
+            // parallel matrix legs; a single shared issue body would race as each leg updates it. Keying
+            // per scenario keeps each one a stable, in-place record (still never spams for that scenario).
+            const marker = `<!-- e2e-tester-rolling:${slug} -->`;
+            const title = `🧪 E2E tester-track findings (rolling) — ${slug}`;
             const body = [
               marker,
               `_Last updated: ${new Date().toISOString()} · run [${context.runId}](${runUrl})_`,
               '',
               '**Track 2 (see `maintenance/AUTOMATION.md` §3, §6).** A live `e2e-testbed` run did NOT pass.',
-              'This issue is the rolling record of tester-track failures — it is updated in place (never',
-              'spams) so the maintainer/tester can fix-and-rerun. Per-scenario command flows are in',
-              '[`tests/e2e/SCENARIO-FLOWS.md`](../blob/main/tests/e2e/SCENARIO-FLOWS.md); append the',
-              'fix to [`tests/e2e/ITERATION-LOG.md`](../blob/main/tests/e2e/ITERATION-LOG.md) once resolved.',
+              'This issue is the rolling record of this scenario\'s tester-track failures — it is updated in',
+              'place (never spams) so the maintainer/tester can fix-and-rerun. Per-scenario command flows',
+              `are in [\`tests/e2e/SCENARIO-FLOWS.md\`](${blob('tests/e2e/SCENARIO-FLOWS.md')}); append the`,
+              `fix to [\`tests/e2e/ITERATION-LOG.md\`](${blob('tests/e2e/ITERATION-LOG.md')}) once resolved.`,
               '',
               '### Latest failing run',
               detail,
               '',
-              `**Artifacts:** download \`e2e-run-${context.runId}\` from the [run page](${runUrl}) for the full transcript + report.`,
+              `**Artifacts:** download \`${artifactName}\` from the [run page](${runUrl}) for the full transcript + report.`,
               '',
               '### Next step',
               '- [ ] Triage the failing assertion(s) above → fix the skill/script/scenario → re-dispatch this scenario.',
               '- [ ] Record the finding + fix in `tests/e2e/ITERATION-LOG.md` (F-code).',
             ].join('\n');
 
-            const { owner, repo } = context.repo;
             const existing = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'e2e-tester', per_page: 100 });
             const found = existing.data.find(i => i.body && i.body.includes(marker));
             if (found) {
               await github.rest.issues.update({ owner, repo, issue_number: found.number, body });
-              core.notice(`Updated rolling tester-track issue #${found.number}`);
+              core.notice(`Updated rolling tester-track issue #${found.number} (${slug})`);
             } else {
               const created = await github.rest.issues.create({ owner, repo, title, body, labels: ['e2e-tester'] });
-              core.notice(`Opened rolling tester-track issue #${created.data.number}`);
+              core.notice(`Opened rolling tester-track issue #${created.data.number} (${slug})`);
             }
 
       - name: Upload run artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-run-${{ github.run_id }}
-          # The full per-run transcript + verdict + harness-report live under artifacts/ci-<run_id>/.
-          # Uploading them (not just the ITERATION-LOG) is what makes the auto-finding issue's
-          # "download the artifacts" pointer actionable for the maintainer.
+          # Per-leg name (matrix legs run in parallel; a shared artifact name would collide).
+          name: e2e-run-${{ github.run_id }}-${{ matrix.slug }}
+          # The full per-run transcript + verdict + harness-report live under
+          # artifacts/ci-<run_id>-<slug>/. Uploading them (not just the ITERATION-LOG) is what makes
+          # the auto-finding issue's "download the artifacts" pointer actionable for the maintainer.
           path: |
-            tests/e2e/artifacts/ci-${{ github.run_id }}/
+            tests/e2e/artifacts/ci-${{ github.run_id }}-${{ matrix.slug }}/
             tests/e2e/ITERATION-LOG.md
           if-no-files-found: ignore

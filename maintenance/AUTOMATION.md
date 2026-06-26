@@ -262,6 +262,11 @@ means the scenario YAML + assertions + teardown exist and pass static validation
 means it has actually passed through the protected `e2e-testbed` run at least once. The two are
 tracked separately because no live run has executed beyond the greenfield smoke yet.
 
+To run the whole tester track in one shot, dispatch `e2e-test.yml` with **`all_scenarios: true`** —
+it fans out to one job per scenario (matrix). Leave **`include_billable: false`** for a first sweep
+to run only the free dry-run/read-only/offline/advisory scenarios (everything except `01`/`04`);
+flip it on once those are green to add the two billable live deploys. Billable legs are serialized.
+
 | Scenario file | Command path exercised | Recipe | Tier | Authored? | Live-green? |
 |---|---|---|---|---|---|
 | `01-greenfield.yaml` | assess → prepare-deploy → `azd up` → verify | 01 | live (deploy) | ✅ | ✅ (greenfield-live-3) |
