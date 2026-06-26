@@ -30,6 +30,7 @@ on:
 permissions:
   contents: read
   id-token: write   # OIDC azure/login
+  issues: write     # auto-finding step opens/updates the rolling Track-2 triage issue on a failing run
 
 concurrency:
   group: e2e-tester
@@ -152,11 +153,112 @@ jobs:
         run: |
           bash infra/cleanup-sweep.sh --apply
 
+      # TRACK-2 AUTO-FINDING (closes the fix-loop). When the harness run does NOT pass — a failed
+      # assertion, a non-clean driver verdict (stalled/looped/timeout/failed), or a crash that left no
+      # report — this opens or updates a SINGLE rolling triage issue (find-or-create on a hidden marker,
+      # same pattern as upstream-watch.yml §7) carrying the harness-report.json summary + a link to the
+      # uploaded artifacts. That turns a red live run into a captured finding the maintainer/tester can
+      # act on WITHOUT transcribing the ITERATION-LOG by hand (see maintenance/AUTOMATION.md §3, §6).
+      # Non-blocking: the job's pass/fail is already decided by the harness step's exit code; this only
+      # records. Runs on every outcome so a crash with no report still files a finding.
+      - name: File Track-2 finding on failure (rolling triage issue)
+        if: ${{ always() && steps.run.outcome != 'success' }}
+        uses: actions/github-script@v7
+        env:
+          SCENARIO: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const scenario = process.env.SCENARIO;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // Find the harness-report.json the harness wrote for THIS run (ci-<run_id>). If the harness
+            // crashed before writing one, fall back to the newest report dir, then to "no report".
+            const artRoot = 'tests/e2e/artifacts';
+            let report = null, reportPath = null;
+            const preferred = path.join(artRoot, `ci-${context.runId}`, 'harness-report.json');
+            try {
+              if (fs.existsSync(preferred)) {
+                report = JSON.parse(fs.readFileSync(preferred, 'utf8'));
+                reportPath = preferred;
+              } else if (fs.existsSync(artRoot)) {
+                const dirs = fs.readdirSync(artRoot)
+                  .map(d => path.join(artRoot, d, 'harness-report.json'))
+                  .filter(p => fs.existsSync(p));
+                if (dirs.length) {
+                  dirs.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+                  reportPath = dirs[0];
+                  report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+                }
+              }
+            } catch (e) {
+              core.warning(`could not read harness report: ${e.message}`);
+            }
+
+            // Build a concise findings block. The failing assertions are the actionable part.
+            let detail;
+            if (report) {
+              const failed = (report.assertions || []).filter(a => !a.ok && !a.skipped);
+              const lines = failed.map(a => `  - ❌ ${a.desc}: ${a.detail}`);
+              detail = [
+                `- **scenario:** \`${report.scenario}\` (\`${scenario}\`)`,
+                `- **overall:** ${report.overall}`,
+                `- **driver verdict:** ${report.driver_verdict} (${report.driver_reason})`,
+                `- **assertions:** ${report.assertions_passed} passed, ${report.assertions_skipped} skipped, ${report.assertions_failed} failed (of ${report.assertions_total})`,
+                failed.length ? `- **failing assertions:**\n${lines.join('\n')}` : '- _no failing assertions — failure was the driver verdict or teardown_',
+              ].join('\n');
+            } else {
+              detail = [
+                `- **scenario:** \`${scenario}\``,
+                `- **harness step outcome:** ${process.env.RUN_OUTCOME}`,
+                `- ⚠️ no \`harness-report.json\` was produced — the harness likely crashed before writing one. See the run log.`,
+              ].join('\n');
+            }
+
+            const marker = '<!-- e2e-tester-rolling -->';
+            const title = '🧪 E2E tester-track findings (rolling)';
+            const body = [
+              marker,
+              `_Last updated: ${new Date().toISOString()} · run [${context.runId}](${runUrl})_`,
+              '',
+              '**Track 2 (see `maintenance/AUTOMATION.md` §3, §6).** A live `e2e-testbed` run did NOT pass.',
+              'This issue is the rolling record of tester-track failures — it is updated in place (never',
+              'spams) so the maintainer/tester can fix-and-rerun. Per-scenario command flows are in',
+              '[`tests/e2e/SCENARIO-FLOWS.md`](../blob/main/tests/e2e/SCENARIO-FLOWS.md); append the',
+              'fix to [`tests/e2e/ITERATION-LOG.md`](../blob/main/tests/e2e/ITERATION-LOG.md) once resolved.',
+              '',
+              '### Latest failing run',
+              detail,
+              '',
+              `**Artifacts:** download \`e2e-run-${context.runId}\` from the [run page](${runUrl}) for the full transcript + report.`,
+              '',
+              '### Next step',
+              '- [ ] Triage the failing assertion(s) above → fix the skill/script/scenario → re-dispatch this scenario.',
+              '- [ ] Record the finding + fix in `tests/e2e/ITERATION-LOG.md` (F-code).',
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const existing = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'e2e-tester', per_page: 100 });
+            const found = existing.data.find(i => i.body && i.body.includes(marker));
+            if (found) {
+              await github.rest.issues.update({ owner, repo, issue_number: found.number, body });
+              core.notice(`Updated rolling tester-track issue #${found.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body, labels: ['e2e-tester'] });
+              core.notice(`Opened rolling tester-track issue #${created.data.number}`);
+            }
+
       - name: Upload run artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: e2e-run-${{ github.run_id }}
+          # The full per-run transcript + verdict + harness-report live under artifacts/ci-<run_id>/.
+          # Uploading them (not just the ITERATION-LOG) is what makes the auto-finding issue's
+          # "download the artifacts" pointer actionable for the maintainer.
           path: |
+            tests/e2e/artifacts/ci-${{ github.run_id }}/
             tests/e2e/ITERATION-LOG.md
           if-no-files-found: ignore

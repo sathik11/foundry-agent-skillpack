@@ -256,25 +256,40 @@ flowchart TD
 ## 6. Scenario test coverage (Track 2 backlog — item "all scenarios must be tested")
 
 The recipes (§2) define customer command-sequences; the tester track must exercise each.
-Current automated coverage in `tests/e2e/scenarios/`:
+Eight scenarios are now authored under `tests/e2e/scenarios/` (the per-scenario command flow for
+each is documented in [`tests/e2e/SCENARIO-FLOWS.md`](../tests/e2e/SCENARIO-FLOWS.md)). **"Authored"**
+means the scenario YAML + assertions + teardown exist and pass static validation; **"live-green"**
+means it has actually passed through the protected `e2e-testbed` run at least once. The two are
+tracked separately because no live run has executed beyond the greenfield smoke yet.
 
-| Scenario / command path | Recipe | Automated? |
+| Scenario file | Command path exercised | Recipe | Tier | Authored? | Live-green? |
+|---|---|---|---|---|---|
+| `01-greenfield.yaml` | assess → prepare-deploy → `azd up` → verify | 01 | live (deploy) | ✅ | ✅ (greenfield-live-3) |
+| `02-setup-evals.yaml` | preflight-role → ensure_continuous_eval `--dry-run` → ensure_scheduled_eval `--dry-run` | 01/04 | dry-run | ✅ | ⏳ pending |
+| `03-configure-rbac.yaml` | check-identities → grant-rbac `--dry-run` (Phase 1 + 2 plan) | (cmd) | dry-run | ✅ | ⏳ pending (live grant tier = TD-38) |
+| `04-traces-evals.yaml` | scaffold (instrumented) → `azd up` → 5× Learn-MCP queries → ensure_continuous_eval (real) → App Insights + eval probes | 01 (obs/eval variant) | live (deploy + real eval) | ✅ | ⏳ pending (TD-35/TD-37) |
+| `05-troubleshoot.yaml` | failure-modes catalog match (F-01) → write diagnosis | (cmd) | offline | ✅ | ⏳ pending |
+| `06-prepare-deploy.yaml` | scaffold → /prepare-deploy preflight → STOP at azd-ready | (cmd) | read-only | ✅ | ⏳ pending |
+| `07-audit-drift.yaml` | scaffold → /audit-drift read-only reconcile → report + stamp | (cmd) | read-only | ✅ | ⏳ pending |
+| `08-setup-purview.yaml` | /setup-purview advisory brief + honest-limitations disclosure | (cmd) | advisory | ✅ | ⏳ pending |
+
+**Still uncovered (no scenario authored yet — Track-2 backlog):**
+
+| Gap | Recipe | Notes |
 |---|---|---|
-| Greenfield (assess → prepare-deploy → deploy → verify) | 01 | ✅ `01-greenfield.yaml` |
-| setup-evals (continuous) | 01/04 | 🟡 `02-setup-evals.yaml` (new — live pass pending) |
-| Brownfield onboarding + drift baseline | 02 | ❌ |
-| Knowledge + Purview | 03 | ❌ |
-| AI Search + scheduled eval | 04 | ❌ |
-| APIM-fronted MCP + RBAC + drift | 05 | ❌ |
-| Multi-agent orchestration | 06 | ❌ |
-| configure-rbac | (cmd) | 🟡 `03-configure-rbac.yaml` (dry-run plan green; live grant tier TD-38) |
-| add-capability-host (lifecycle: create → verify → teardown) | (cmd) | ❌ → **this phase** (TD-39) |
-| Observability live — LangGraph agent (trigger + confirm traces) | 01 | ❌ → **this phase** (TD-35/TD-37) |
-| setup-purview · publish-teams · audit-drift | (cmds) | ❌ → next phase |
-| troubleshoot (diagnostic-only, synthetic symptoms) | (cmd) | ❌ → fold into above |
+| Brownfield onboarding + drift baseline | 02 | bring-your-own code scan |
+| Knowledge + Purview (KB MCP + Content Safety) | 03 | recipe-only |
+| AI Search direct + scheduled eval (live) | 04 | scenario `02` only dry-runs the scheduled path |
+| APIM-fronted MCP + per-source RBAC + drift | 05 | recipe-only |
+| Multi-agent orchestration | 06 | recipe-only |
+| add-capability-host lifecycle (create → verify → teardown) | (cmd) | **this phase** (TD-39) — expensive (Cosmos + Search + APIM); DELETE+recreate model |
+| publish-teams | (cmd) | next phase |
 
-Closing this table is the standing Track-2 backlog. Until a scenario is green here, its recipe
-is "documented but unverified."
+Closing this table is the standing Track-2 backlog. Until a scenario is **live-green** here, its
+recipe is "documented + statically validated, but not yet proven against live Foundry." A failing
+live run now auto-files a finding on the rolling triage issue (the `e2e-test.yml` auto-finding step,
+§3) so the gap is captured without a human transcribing the
+[ITERATION-LOG](../tests/e2e/ITERATION-LOG.md).
 
 ### Prioritization (product-owner direction, 2026-06-26)
 
@@ -294,12 +309,15 @@ is "documented but unverified."
   destroy the whole project to re-test; full cost teardown just deletes the project-scoped test
   resources (Cosmos/Search/APIM) that `cleanup-sweep.sh` tags.
 
-**Next phase — deferred (tracked, not scheduled):** setup-purview, publish-teams, audit-drift.
+**Next phase — deferred (tracked, not scheduled):** publish-teams (no scenario authored). Note
+`audit-drift` and `setup-purview` are now **authored** as read-only/advisory scenarios
+(`07-audit-drift.yaml`, `08-setup-purview.yaml`) and only await a live-green run.
 
 **`troubleshoot`** is diagnostic-only — it matches a symptom to a fix from the **foundry-failure-modes**
 catalog (F-01…F-24), plus a project-topology re-check and an App Insights KQL hook; **no Azure
-mutation.** Testable cheaply with synthetic symptoms asserting the right failure-mode id/fix, so it is
-folded into the configure-rbac / observability scenarios rather than getting its own live run.
+mutation.** It is now authored as its own cheap offline scenario (`05-troubleshoot.yaml`) that drives a
+synthetic symptom and asserts the right failure-mode id/fix (F-01, reserved env var) — no live run
+needed.
 
 ---
 
