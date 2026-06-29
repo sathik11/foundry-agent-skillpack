@@ -168,6 +168,15 @@ jobs:
       - name: Install opencode driver CLI
         run: npm install -g opencode-ai
 
+      # azd is what /prepare-deploy's preflight-azd.sh checks for (H6) and what greenfield/traces
+      # actually invoke for `azd up`. Without it every live deploy aborts at preflight with
+      # FAIL_REASON=azd_not_installed and never stamps agent-status.json — so the deploy/verify
+      # assertions all read "agent-status.json not found". Install it here so the live legs can deploy.
+      - name: Install Azure Developer CLI (azd)
+        run: |
+          curl -fsSL https://aka.ms/install-azd.sh | bash
+          azd version
+
       # apm (Agent Package Manager) is what setup-workspace.sh uses to materialize the skillpack
       # into the clean non-git workspace. Without it the harness fails at the "F-K: preparing clean
       # non-git workspace" step with "apm CLI not on PATH". Use the same canonical installer the
@@ -185,6 +194,7 @@ jobs:
           export PATH="$HOME/.apm/bin:$HOME/.local/bin:$PATH"
           command -v opencode >/dev/null || { echo "opencode missing"; exit 1; }
           command -v apm      >/dev/null || { echo "apm missing"; exit 1; }
+          command -v azd      >/dev/null || { echo "azd missing"; exit 1; }
           apm --version || true
 
       # No API key here. configure-opencode.sh runs `az account get-access-token` (the SP we just
