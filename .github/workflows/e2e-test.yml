@@ -168,6 +168,25 @@ jobs:
       - name: Install opencode driver CLI
         run: npm install -g opencode-ai
 
+      # apm (Agent Package Manager) is what setup-workspace.sh uses to materialize the skillpack
+      # into the clean non-git workspace. Without it the harness fails at the "F-K: preparing clean
+      # non-git workspace" step with "apm CLI not on PATH". Use the same canonical installer the
+      # apm-install-test workflow uses (curl | sh), so both jobs exercise the same install path.
+      - name: Install Agent Package Manager (apm)
+        run: |
+          curl -sSL https://aka.ms/apm-unix | sh
+          # The installer drops the binary in ~/.apm/bin (and/or ~/.local/bin). Ensure both are on
+          # PATH for the remainder of the job so `command -v apm` succeeds in setup-workspace.sh.
+          echo "$HOME/.apm/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify required CLIs
+        run: |
+          export PATH="$HOME/.apm/bin:$HOME/.local/bin:$PATH"
+          command -v opencode >/dev/null || { echo "opencode missing"; exit 1; }
+          command -v apm      >/dev/null || { echo "apm missing"; exit 1; }
+          apm --version || true
+
       # No API key here. configure-opencode.sh runs `az account get-access-token` (the SP we just
       # logged in as has Cognitive Services User on the driver-model account) and writes that AAD
       # token into ~/.config/opencode/opencode.json. Tokens are short-lived, so this is minted per run.
