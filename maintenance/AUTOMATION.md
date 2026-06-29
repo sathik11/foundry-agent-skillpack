@@ -166,6 +166,22 @@ teardown** step (`if: always()` → `infra/cleanup-sweep.sh --apply`) that delet
 Foundry agent resources on every outcome (pass / fail / cancel). `apm-install-test.yml` remains
 the lighter install smoke test that runs on PRs.
 
+**Testbed-executor branch — test workflow edits WITHOUT merging to `main`.** The live workflows are
+`workflow_dispatch`, which runs the YAML from *whichever branch ref you select*, so editing then
+re-merging to `main` just to test is unnecessary (and pollutes `main` with non-core commits). The
+only thing pinning a live run to `main` is the `e2e-testbed` environment's **deployment-branches**
+allow-list. We open that list to a single dedicated branch pattern, **`e2e/*`** (long-lived
+executor: **`e2e/testbed-exec`**), so workflow/scenario/script changes are exercised on the live
+testbed from that branch before anything reaches `main`. The PO approval gate and OIDC fed-cred
+(scoped `environment:e2e-testbed`, branch-agnostic) are unchanged.
+
+*One-time setup:* Settings → Environments → `e2e-testbed` → **Deployment branches** → *Selected* →
+add `main` **and** `e2e/*`. The cron schedules stay `main`-only by design (they ignore the allow-list
+for default-branch dispatch); only manual runs use other branches. *Per change:* push to
+`e2e/testbed-exec` (or `e2e/<topic>`) → Actions → **Run workflow** → pick that branch → iterate. Only
+the proven core (skill/script/recipe/scenario) is PR'd to `main`; the executor branch absorbs the
+workflow-tuning churn.
+
 **Technical debt is the human-in-the-loop valve.** Anything Track 1 cannot safely auto-apply
 becomes a `TECHNICAL_DEBT.md` entry that maintainers review periodically (e.g. TD-28 cross-OS
 scripts, TD-35 LangGraph observability/eval coverage).
