@@ -6,7 +6,7 @@ description: Every skill the skillpack ships, what each one is for, and where to
 The skillpack installs **15 engineering skills** + **1 playbook-package skill** = 16 total. Each is a markdown router (`SKILL.md`) plus sub-docs and (where applicable) runnable scripts. Your coding agent loads the routers aggressively and treats sub-docs as on-demand reads.
 
 :::note[Skills are not slash commands]
-These **skills** are *knowledge* loaded as context (e.g. `foundry-deploy` ships scaffold templates + capability-manifest schema). They have no inputs and no steps. To **invoke** a workflow, use a **slash command** — e.g. `/plan-agent`, `/configure-rbac`, `/verify-agent`. See [Reference → Prompts](/reference/prompts/) for the 9 slash commands and their parameters, or [Install → Discovering the slash commands](/getting-started/install/#discovering-the-slash-commands) for the per-IDE discovery table.
+These **skills** are *knowledge* loaded as context (e.g. `foundry-deploy` ships scaffold templates + capability-manifest schema). They have no inputs and no steps. To **invoke** a workflow, use a **slash command** — e.g. `/plan-agent`, `/configure-rbac`, `/verify-agent`. See [Reference → Prompts](/reference/prompts/) for the 11 slash commands and their parameters, or [Install → Discovering the slash commands](/getting-started/install/#discovering-the-slash-commands) for the per-IDE discovery table.
 
 Naming convention: anything prefixed with `foundry-` is a skill; bare verbs (`plan-agent`, `verify-agent`, …) are prompts.
 :::

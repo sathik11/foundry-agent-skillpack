@@ -2,8 +2,8 @@
 
 This repo ships **two halves** that you can test independently:
 
-1. **The APM package** — `foundry-agent-engineering/` — installs cleanly into any project as 11 skills + 7 prompts + 1 agent persona.
-2. **A fixture agent** — `agents/learn-agent/` — a *deliberately flawed* hosted-agent project used to exercise the `/prepare-deploy` slash command end-to-end.
+1. **The APM package** — `foundry-agent-skillpack/` — installs cleanly into any project as 15 skills + 11 prompts + 1 agent persona.
+2. **A fixture agent** — `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/samples/learn-agent/` — a *deliberately flawed* hosted-agent project used to exercise the `/prepare-deploy` slash command end-to-end.
 
 ---
 
@@ -24,26 +24,26 @@ name: apm-install-test
 version: 0.0.1
 targets: [copilot, agent-skills]
 EOF
-apm install /path/to/Foundry-Hosted-Agent-Skill/foundry-agent-engineering
+apm install /path/to/foundry-agent-skillpack/foundry-agent-skillpack
 ```
 
 **Expected output:**
 
 ```
 [i] Targets: agent-skills, copilot  (source: apm.yml)
-  [+] foundry-agent-engineering (local)
-  |-- 7 prompts integrated -> .github/prompts/
+  [+] foundry-agent-skillpack (local)
+  |-- 11 prompts integrated -> .github/prompts/
   |-- 1 agents integrated -> .github/agents/
-  |-- 11 skill(s) integrated -> .agents/skills/
+  |-- 15 skill(s) integrated -> .agents/skills/
 ```
 
 **Verify the layout:**
 
 ```bash
-ls .agents/skills | wc -l        # → 11
-ls .github/prompts               # → 7 .prompt.md files
-find .agents/skills/foundry-deploy -type f | wc -l        # → 11 (router + 5 sub-docs + 4 templates)
-find .agents/skills/foundry-guardrails -type f | wc -l    # → 9 (router + 4 sub-docs + scripts/{guardrails.py, redteam.yml, grant-cs-access.sh, kql/guardrail-spans.kql})
+ls .agents/skills | wc -l        # → 15
+ls .github/prompts               # → 11 .prompt.md files
+find .agents/skills/foundry-deploy -type f | wc -l        # → 42 (router + sub-docs + templates + scripts)
+find .agents/skills/foundry-guardrails -type f | wc -l    # → 12 (router + sub-docs + scripts/{guardrails.py, redteam.yml, grant-cs-access.sh, kql/guardrail-spans.kql})
 find .agents/skills/foundry-identity -type f | wc -l      # → 6 (router + 3 sub-docs + scripts/{check-identities.sh, grant-rbac.sh})
 ```
 
@@ -53,14 +53,14 @@ If any number differs, something is being treated as a stray skill at the packag
 
 ## Half 2 — Run `/prepare-deploy` against the fixture agent
 
-The `agents/learn-agent/` fixture is **intentionally flawed** so the prompt has something to catch. The flaws are:
+The `learn-agent` fixture (under `foundry-agent-playbook/.apm/skills/foundry-agent-playbook/samples/learn-agent/`) is **intentionally flawed** so the prompt has something to catch. The flaws are:
 
 | # | Where | Flaw | Which prompt step catches it |
 |---|---|---|---|
-| 1 | `agents/learn-agent/requirements.txt` | `azure-identity>=1.19.0` is missing the `<1.26.0a0` upper bound — would silently pull beta `1.26.0b2` | **H3** |
-| 2 | `agents/learn-agent/main.py` | No `GuardrailAgentMiddleware` import / no `middleware=[…]` arg on `Agent(…)` | **H4** + **Step 2.5** capability gate |
-| 3 | `agents/learn-agent/` | No `guardrails.py` file vendored, even though `agent-capabilities.yaml` declares `guardrails.enabled: true middleware_mode: entry` | **Step 2.5** |
-| 4 | `agents/learn-agent/Dockerfile` | `COPY main.py .` instead of `COPY *.py ./` — even if (3) is fixed, the vendored guardrails file won't ship | **H2** (transitive once #3 is fixed) |
+| 1 | `learn-agent/requirements.txt` | `azure-identity>=1.19.0` is missing the `<1.26.0a0` upper bound — would silently pull beta `1.26.0b2` | **H3** |
+| 2 | `learn-agent/main.py` | No `GuardrailAgentMiddleware` import / no `middleware=[…]` arg on `Agent(…)` | **H4** + **Step 2.5** capability gate |
+| 3 | `learn-agent/` | No `guardrails.py` file vendored, even though `agent-capabilities.yaml` declares `guardrails.enabled: true middleware_mode: entry` | **Step 2.5** |
+| 4 | `learn-agent/Dockerfile` | `COPY main.py .` instead of `COPY *.py ./` — even if (3) is fixed, the vendored guardrails file won't ship | **H2** (transitive once #3 is fixed) |
 | 5 | repo root | No `azure.yaml`, no `infra/` — `azd up` cannot run | **Step 3** |
 
 ### How to run

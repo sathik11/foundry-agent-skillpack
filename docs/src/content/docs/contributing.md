@@ -24,7 +24,7 @@ foundry-agent-skillpack/
 │   ├── TECHNICAL_DEBT.md
 │   └── .apm/
 │       ├── skills/               # 15 skills
-│       ├── prompts/              # 9 slash commands
+│       ├── prompts/              # 11 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
 ├── foundry-agent-playbook/       # Fixtures + recipes (opt-in)

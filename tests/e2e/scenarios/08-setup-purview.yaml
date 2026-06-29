@@ -1,0 +1,99 @@
+# Setup-purview smoke journey — scenario 08 (advisory/inspection, NO mutation).
+#
+# /setup-purview is mostly an HONEST governance walkthrough: prerequisites (license + role), where the
+# Purview toggle lives, how to verify inventory/audit, and — its unique value — a clear disclosure of
+# the Foundry-specific LIMITATIONS (admin lifecycle audit AgentAdminActivity not available; native
+# runtime DLP enforcement not available → use the Layer 1.5 middleware; Sentinel needs the O365
+# Management Activity API). The toggle itself is a portal click an unattended CI driver cannot perform,
+# so this scenario drives the ADVISORY path: produce a governance brief and prove the limitations are
+# stated correctly. No Azure mutation; at most a read-only toggle-status GET.
+#
+# What it proves: the foundry-purview skill routes correctly and the prompt reports the preview
+# limitations HONESTLY (the failure mode this prompt exists to prevent is over-promising Purview
+# coverage for Foundry agents).
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: setup-purview
+title: Setup-purview advisory brief + honest limitations (no mutation)
+recipe: .opencode/commands/setup-purview.md
+surfaces: [purview_governance, honest_limitations, dlp_middleware_pointer]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+
+prompt: |
+  You are the foundry-engineer. Produce a Microsoft Purview governance brief for a Foundry account
+  using the skillpack's /setup-purview flow. This is ADVISORY + read-only: you must NOT flip the
+  Purview toggle, NOT create any DLP policy, and NOT create/update/delete any Azure / Purview resource.
+  Flipping the toggle is a portal action; for this run you DOCUMENT the steps and — most importantly —
+  disclose the Foundry-specific limitations honestly. The skillpack is already installed (skills under
+  .agents/skills/, commands + the foundry-engineer persona under .opencode/). You are already logged in
+  to Azure as a service principal.
+
+  Confirmed target facts (do NOT rediscover, do NOT create/delete any infrastructure):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+
+  Steps:
+
+  1. Open the foundry-purview skill (.agents/skills/foundry-purview/) and follow /setup-purview for
+     foundry_account=ai-account-cnkboq4uixafy.
+  2. Write a governance brief to governance/purview-brief.md (mkdir -p the directory) covering:
+       - Prerequisites: required licensing (M365 E7 or Microsoft Agent 365) and the required role
+         (Cognitive Services Security Integration Administrator OR Foundry Account Owner).
+       - Where the toggle lives: Foundry account → Operate → Compliance → Security → Microsoft Purview
+         → Enable (DO NOT flip it — document only).
+       - How to verify inventory (Purview DSPM → Discover → Apps and Agents) and audit (search
+         operation AIInvokeAgent).
+       - The runtime-enforcement path: the Purview audit toggle gives VISIBILITY ONLY, with NO runtime
+         enforcement — point at the Layer 1.5 foundry-guardrails purview-dlp.md middleware for actual
+         block/warn/audit.
+       - A LIMITATIONS section stating honestly that: admin lifecycle audit (AgentAdminActivity) is
+         NOT available for Foundry agents today; native runtime DLP enforcement is NOT available (use
+         the Layer 1.5 middleware instead); Sentinel integration requires the Office 365 Management
+         Activity API (not the M365 connector).
+  3. Print a short summary + the limitations to the user.
+
+  Rules: ADVISORY only — do NOT enable the toggle, do NOT create a DLP policy, do NOT create/update/
+  delete any resource. A read-only toggle-STATUS check (GET) is allowed but optional. Never edit files
+  under .agents/skills/ or apm_modules/ (the installed skillpack). If you cannot determine something,
+  say so honestly in the brief rather than guessing. End with the limitations disclosure.
+
+budgets:
+  wall_clock: 900         # 15 min — a docs-driven brief + small file write
+  no_progress: 360        # 6 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: governance/purview-brief.md
+    desc: governance brief written
+  - kind: file_contains
+    path: governance/purview-brief.md
+    contains: AgentAdminActivity
+    desc: brief honestly discloses the admin-lifecycle-audit limitation
+  - kind: file_contains
+    path: governance/purview-brief.md
+    contains: AIInvokeAgent
+    desc: brief documents the audit operation to search for
+  - kind: file_contains
+    path: governance/purview-brief.md
+    contains: purview-dlp
+    desc: brief points at the Layer 1.5 middleware for real runtime enforcement
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; advisory brief only

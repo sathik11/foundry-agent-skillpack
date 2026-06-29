@@ -2,13 +2,13 @@
 
 > **The end-to-end skillpack for Microsoft Foundry hosted agents.** Plan, deploy, govern, evaluate, and audit hosted and prompt agents on Foundry — with persona-aware preflight, durable per-agent state, and a read-only drift detector.
 
-[![Docs](https://img.shields.io/badge/docs-foundry--agent--skillpack-6c47ff)](https://foundry-agent-skillpack.example.com)
+[![Docs](https://img.shields.io/badge/docs-foundry--agent--skillpack-6c47ff)](docs/src/content/docs/index.mdx)
 [![APM](https://img.shields.io/badge/APM-package-blue)](https://microsoft.github.io/apm/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **v0.20.0 repo rename.** The GitHub repo was renamed from `Foundry-Hosted-Agent-Skill` to [`foundry-agent-skillpack`](https://github.com/sathik11/foundry-agent-skillpack) to match the primary package name. GitHub auto-redirects old URLs. The engineering package was previously renamed from `foundry-agent-harness` → `foundry-agent-skillpack` in v0.19.0; `aliases: [foundry-agent-harness]` still ships through this release (slated to drop in v0.24 — see [TD-19](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-19--package-rename-foundry-agent-harness--foundry-agent-skillpack)).
 
-📖 **[View the full documentation site →](https://foundry-agent-skillpack.example.com)** *(Azure Static Web Apps)*
+📖 **[Read the documentation →](docs/src/content/docs/index.mdx)** — rendered to Azure Static Web Apps from `docs/` (see [`docs/DEPLOY.md`](docs/DEPLOY.md)).
 
 ---
 
@@ -16,7 +16,7 @@
 
 Two installable APM packages plus a hosted documentation site:
 
-- **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 9 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
+- **`foundry-agent-skillpack/`** — engineering skillpack: 15 skills, 11 slash commands, convergent lifecycle scripts for eval / red-team / drift detection, vendored runtime middleware (guardrails + Purview DLP), per-agent durable state.
 - **`foundry-agent-playbook/`** — opt-in: 2 runnable samples (`learn-agent`, `langgraph-chat-sample`) and 6 end-to-end recipes covering greenfield, brownfield, knowledge + Purview, AI Search + scheduled eval, APIM-fronted MCP, and multi-agent orchestration.
 - **`docs/`** — Astro Starlight site rendered to Azure Static Web Apps.
 
@@ -32,7 +32,7 @@ It detects what's installed, installs only what's missing, prints exactly what y
 
 **Windows users:** the skillpack's scripts are bash. **Use WSL2** (`wsl --install`, then run the curl one-liner inside WSL). Native Windows support via PowerShell siblings is under evaluation — see [TD-28](./foundry-agent-skillpack/TECHNICAL_DEBT.md#td-28--cross-os-script-runtime--bash--pwsh-dual-script-bake-off). Git Bash is **not** supported (path-mangling + `python3` aliasing issues bite our scripts).
 
-What gets installed: `apm` (check only), `az` (≥ 2.80), `azd` (≥ 1.24) + `azd ai agent` extension, `jq`, `python3.12+`. Full per-tool justification: [docs → install → prerequisites](https://foundry-agent-skillpack.example.com/getting-started/install/#prerequisites).
+What gets installed: `apm` (check only), `az` (≥ 2.80), `azd` (≥ 1.24) + `azd ai agent` extension, `jq`, `python3.12+`. Full per-tool justification: [docs → install → prerequisites](docs/src/content/docs/getting-started/install.md#prerequisites).
 
 ## Install
 
@@ -60,13 +60,13 @@ apm install sathik11/foundry-agent-skillpack/foundry-agent-skillpack
 apm install sathik11/foundry-agent-skillpack/foundry-agent-playbook
 ```
 
-> **Already have `apm.yml`?** Add a `targets:` line if missing — APM CLI no longer auto-defaults to `copilot` and refuses to install without one. See [docs → Install → Troubleshooting](https://foundry-agent-skillpack.example.com/getting-started/install/#troubleshooting--no-harness-detected).
+> **Already have `apm.yml`?** Add a `targets:` line if missing — APM CLI no longer auto-defaults to `copilot` and refuses to install without one. See [docs → Install → Troubleshooting](docs/src/content/docs/getting-started/install.md#troubleshooting--no-harness-detected).
 
 After install you'll see:
 
 ```
-.agents/skills/                    ← 16 skills (15 engineering + 1 fixtures)
-.github/prompts/                   ← 9 slash commands
+.agents/skills/                    ← 15 skillpack skills (+1 fixtures skill if the playbook is installed too)
+.github/prompts/                   ← 11 slash commands
 .github/agents/                    ← 1 agent persona
 ```
 
@@ -129,7 +129,7 @@ The full matrix (packages + ARM api-versions) lives in [`maintenance/SUPPORTED.m
 
 **Use both when:** you want Foundry-native eval/RBAC/identity orchestration (this skillpack) *and* deterministic per-tool-call deny + tamper-evident audit at runtime (AGT). This is the recommended posture for production Foundry hosted agents.
 
-More detail + the OWASP positioning split: [docs → Related work](https://foundry-agent-skillpack.example.com/concepts/related-work/).
+More detail + the OWASP positioning split: [docs → Related work](docs/src/content/docs/concepts/related-work.md).
 
 ## What runs in your tenant vs. ours
 
@@ -151,7 +151,7 @@ foundry-agent-skillpack/
 │   ├── TECHNICAL_DEBT.md
 │   └── .apm/
 │       ├── skills/               # 15 skills
-│       ├── prompts/              # 9 slash commands
+│       ├── prompts/              # 11 slash commands
 │       ├── agents/               # 1 agent persona
 │       └── instructions/
 ├── foundry-agent-playbook/       # Fixtures + recipes (opt-in)
@@ -159,7 +159,7 @@ foundry-agent-skillpack/
 │   ├── README.md
 │   └── .apm/skills/foundry-agent-playbook/
 │       ├── samples/             # learn-agent, langgraph-chat-sample
-│       └── recipes/              # 5 end-to-end walkthroughs
+│       └── recipes/              # 6 end-to-end walkthroughs
 ├── docs/                         # Astro Starlight docs site
 ├── ROADMAP.md
 ├── TESTING.md
@@ -191,7 +191,7 @@ See [ROADMAP.md](ROADMAP.md). Highlights for the next minor release:
 
 ## Contributing
 
-See the [Contributing page on the docs site](https://foundry-agent-skillpack.example.com/contributing/) (or [docs/src/content/docs/contributing.md](docs/src/content/docs/contributing.md) on disk).
+See the [Contributing guide](docs/src/content/docs/contributing.md) (rendered on the docs site).
 
 ## License
 

@@ -15,23 +15,104 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Scenario yaml under tests/e2e/scenarios/'
+        description: >-
+          Single scenario yaml under tests/e2e/scenarios/ (ignored when
+          all_scenarios is true). Live (mutating, billable): 01-greenfield
+          (deploy), 04-traces-evals (deploy + real traffic + real continuous-eval
+          rule). Dry-run / advisory (NO Azure mutation, read-only at most):
+          02-setup-evals, 03-configure-rbac, 05-troubleshoot, 06-prepare-deploy,
+          07-audit-drift, 08-setup-purview. 04 also creates a data-plane
+          continuous-eval rule that the eval teardown step below removes.
         type: string
         default: tests/e2e/scenarios/01-greenfield.yaml
+      all_scenarios:
+        description: >-
+          Run EVERY scenario in tests/e2e/scenarios/ as a matrix (fan-out, one job
+          per scenario) instead of the single `scenario` above. The two billable
+          live scenarios (01, 04) are serialized to one-at-a-time; the rest run in
+          parallel. Use this for a full tester-track sweep.
+        type: boolean
+        default: false
+      include_billable:
+        description: >-
+          When all_scenarios is true, also run the billable live scenarios
+          (01-greenfield, 04-traces-evals). Leave OFF to sweep only the free
+          dry-run/read-only/offline/advisory scenarios first (recommended for the
+          first run — shakes out the harness without spending money).
+        type: boolean
+        default: false
   schedule:
     - cron: '0 8 1 * *'   # 1st of month 08:00 UTC — pre-release candidate run
 
 permissions:
   contents: read
   id-token: write   # OIDC azure/login
+  issues: write     # auto-finding step opens/updates the rolling Track-2 triage issue on a failing run
 
 concurrency:
   group: e2e-tester
   cancel-in-progress: false   # never cancel mid-run — teardown must complete
 
 jobs:
-  e2e:
+  # Resolve the scenario list ONCE, up front, so the live job can fan out over a matrix. Two modes:
+  #   - single  : the `scenario` input (or the schedule default) → a 1-element matrix.
+  #   - sweep   : every tests/e2e/scenarios/*.yaml → an N-element matrix. Billable scenarios (those
+  #               whose cleanup mutates Azure — 01-greenfield, 04-traces-evals) are tagged so the
+  #               live job can (a) optionally exclude them and (b) serialize them (max-parallel).
+  # This job needs no secrets and never touches Azure — it only reads the scenario files.
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: build
+        env:
+          ALL: ${{ inputs.all_scenarios }}
+          INCLUDE_BILLABLE: ${{ inputs.include_billable }}
+          SINGLE: ${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob, json, os, yaml
+
+          # A scenario is "billable" when running it mutates Azure. The honest signal already in the
+          # scenario is cleanup.teardown_agents / teardown_evals — if the harness has to tear DOWN a
+          # deployed agent or a data-plane eval rule, the run created billable infra. (Dry-run /
+          # read-only / advisory scenarios set neither.)
+          def billable(path):
+              c = (yaml.safe_load(open(path)) or {}).get("cleanup", {}) or {}
+              return bool(c.get("teardown_agents") or c.get("teardown_evals"))
+
+          all_mode = os.environ["ALL"] == "true"
+          include_billable = os.environ["INCLUDE_BILLABLE"] == "true"
+
+          if all_mode:
+              files = sorted(glob.glob("tests/e2e/scenarios/*.yaml"))
+              entries = [{"scenario": f, "billable": billable(f)} for f in files]
+              if not include_billable:
+                  entries = [e for e in entries if not e["billable"]]
+          else:
+              s = os.environ["SINGLE"]
+              entries = [{"scenario": s, "billable": billable(s)}]
+
+          # slug: a filesystem/issue-safe id per leg so artifacts + the rolling issue don't collide.
+          for e in entries:
+              e["slug"] = os.path.splitext(os.path.basename(e["scenario"]))[0]
+
+          print("matrix=" + json.dumps({"include": entries}))
+          PY
+      - run: echo "Resolved matrix → ${{ steps.build.outputs.matrix }}"
+
+  e2e:
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one scenario's failure must not cancel the others in the sweep
+      # Serialize billable legs and keep total concurrency modest. The testbed is a single shared
+      # baseline; two live deploys at once would race on the same RG. 1 keeps it strictly serial when
+      # billable scenarios are present; the free legs are short, so the wall-clock cost is acceptable.
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     # Safety net. A hung `azd up` or stuck driver must NOT ride the 6h GitHub default and leave
     # billable Foundry resources running. On timeout the job is cancelled, but the teardown step
     # (if: always()) still executes, so the testbed is always swept.
@@ -56,7 +137,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pyyaml
+      # pyyaml drives the harness; azure-ai-projects + azure-identity back the out-of-band Azure
+      # availability probes (eval_rule_exists / eval_run_present query the Foundry project SDK, and
+      # the App Insights trace probe resolves the component via az CLI). The probes degrade to SKIP
+      # when these are absent, so they are installed here to let scenario 04 actually verify them.
+      - run: pip install pyyaml azure-ai-projects azure-identity
 
       - name: Azure login (service principal secret)
         # PRIMARY path. AZURE_CREDENTIALS is the JSON blob from
@@ -94,8 +179,44 @@ jobs:
         timeout-minutes: 80   # harness has its own wall-clock guardrail; this is the outer bound
         run: |
           python tests/e2e/harness.py \
-            --scenario "${{ inputs.scenario || 'tests/e2e/scenarios/01-greenfield.yaml' }}" \
-            --clean-workspace --backend opencode --run-id "ci-${{ github.run_id }}"
+            --scenario "${{ matrix.scenario }}" \
+            --clean-workspace --backend opencode \
+            --run-id "ci-${{ github.run_id }}-${{ matrix.slug }}"
+
+      # DATA-PLANE eval teardown — runs BEFORE the ARM sweep so the project still exists while we
+      # delete the rule. cleanup-sweep.sh is ARM-tag based and CANNOT see a continuous-eval rule /
+      # eval object (they live inside the Foundry project, not as ARM resources). Only scenarios that
+      # actually create one (cleanup.teardown_evals: true — i.e. 04-traces-evals) need this; for every
+      # other scenario the parse yields teardown_evals=false and the step is a logged no-op.
+      # teardown-evals.py is best-effort by design (it never hard-fails without --strict), so this is
+      # safe under if: always().
+      - name: Teardown data-plane continuous-eval rule
+        if: ${{ always() }}
+        timeout-minutes: 10
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: |
+          python - "$SCENARIO" <<'PY'
+          import subprocess, sys, yaml
+          sc = yaml.safe_load(open(sys.argv[1]))
+          cleanup = sc.get("cleanup", {}) or {}
+          if not cleanup.get("teardown_evals"):
+              print(f"[teardown-evals] {sys.argv[1]}: teardown_evals not set — nothing to clean (no-op).")
+              raise SystemExit(0)
+          target = sc.get("target", {}) or {}
+          endpoint = target.get("project_endpoint")
+          agent = target.get("agent_name")
+          if not endpoint or not agent:
+              print("[teardown-evals] teardown_evals set but project_endpoint/agent_name missing — no-op.")
+              raise SystemExit(0)
+          # No --strict: a missing rule / preview-SDK rename / absent creds degrades to exit 0.
+          rc = subprocess.call([
+              "python", "tests/e2e/teardown-evals.py",
+              "--project-endpoint", endpoint,
+              "--agent-name", agent,
+          ])
+          raise SystemExit(rc)
+          PY
 
       # MANDATORY test-completion teardown. Runs on EVERY outcome (pass / fail / cancel) so a
       # failed or cancelled run never leaves billable Foundry agent resources behind. The standing
@@ -107,11 +228,119 @@ jobs:
         run: |
           bash infra/cleanup-sweep.sh --apply
 
+      # TRACK-2 AUTO-FINDING (closes the fix-loop). When the harness run does NOT pass — a failed
+      # assertion, a non-clean driver verdict (stalled/looped/timeout/failed), or a crash that left no
+      # report — this opens or updates a SINGLE rolling triage issue (find-or-create on a hidden marker,
+      # same pattern as upstream-watch.yml §7) carrying the harness-report.json summary + a link to the
+      # uploaded artifacts. That turns a red live run into a captured finding the maintainer/tester can
+      # act on WITHOUT transcribing the ITERATION-LOG by hand (see maintenance/AUTOMATION.md §3, §6).
+      # Non-blocking: the job's pass/fail is already decided by the harness step's exit code; this only
+      # records. Runs on every outcome so a crash with no report still files a finding.
+      - name: File Track-2 finding on failure (rolling triage issue)
+        if: ${{ always() && steps.run.outcome != 'success' }}
+        uses: actions/github-script@v7
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+          SLUG: ${{ matrix.slug }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const scenario = process.env.SCENARIO;
+            const slug = process.env.SLUG;
+            const { owner, repo } = context.repo;
+            const repoUrl = `${context.serverUrl}/${owner}/${repo}`;
+            const runUrl = `${repoUrl}/actions/runs/${context.runId}`;
+            const blob = (p) => `${repoUrl}/blob/${context.ref.replace('refs/heads/', '')}/${p}`;
+            const artifactName = `e2e-run-${context.runId}-${slug}`;
+
+            // Find the harness-report.json for THIS leg (ci-<run_id>-<slug>). If the harness crashed
+            // before writing one, fall back to the newest report dir, then to "no report".
+            const artRoot = 'tests/e2e/artifacts';
+            let report = null;
+            const preferred = path.join(artRoot, `ci-${context.runId}-${slug}`, 'harness-report.json');
+            try {
+              if (fs.existsSync(preferred)) {
+                report = JSON.parse(fs.readFileSync(preferred, 'utf8'));
+              } else if (fs.existsSync(artRoot)) {
+                const dirs = fs.readdirSync(artRoot)
+                  .map(d => path.join(artRoot, d, 'harness-report.json'))
+                  .filter(p => fs.existsSync(p));
+                if (dirs.length) {
+                  dirs.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+                  report = JSON.parse(fs.readFileSync(dirs[0], 'utf8'));
+                }
+              }
+            } catch (e) {
+              core.warning(`could not read harness report: ${e.message}`);
+            }
+
+            // Build a concise findings block. The failing assertions are the actionable part.
+            let detail;
+            if (report) {
+              const failed = (report.assertions || []).filter(a => !a.ok && !a.skipped);
+              const lines = failed.map(a => `  - ❌ ${a.desc}: ${a.detail}`);
+              detail = [
+                `- **scenario:** \`${report.scenario}\` (\`${scenario}\`)`,
+                `- **overall:** ${report.overall}`,
+                `- **driver verdict:** ${report.driver_verdict} (${report.driver_reason})`,
+                `- **assertions:** ${report.assertions_passed} passed, ${report.assertions_skipped} skipped, ${report.assertions_failed} failed (of ${report.assertions_total})`,
+                failed.length ? `- **failing assertions:**\n${lines.join('\n')}` : '- _no failing assertions — failure was the driver verdict or teardown_',
+              ].join('\n');
+            } else {
+              detail = [
+                `- **scenario:** \`${scenario}\``,
+                `- **harness step outcome:** ${process.env.RUN_OUTCOME}`,
+                `- ⚠️ no \`harness-report.json\` was produced — the harness likely crashed before writing one. See the run log.`,
+              ].join('\n');
+            }
+
+            // ONE rolling issue PER SCENARIO (marker + title carry the slug). A full sweep fans out to
+            // parallel matrix legs; a single shared issue body would race as each leg updates it. Keying
+            // per scenario keeps each one a stable, in-place record (still never spams for that scenario).
+            const marker = `<!-- e2e-tester-rolling:${slug} -->`;
+            const title = `🧪 E2E tester-track findings (rolling) — ${slug}`;
+            const body = [
+              marker,
+              `_Last updated: ${new Date().toISOString()} · run [${context.runId}](${runUrl})_`,
+              '',
+              '**Track 2 (see `maintenance/AUTOMATION.md` §3, §6).** A live `e2e-testbed` run did NOT pass.',
+              'This issue is the rolling record of this scenario\'s tester-track failures — it is updated in',
+              'place (never spams) so the maintainer/tester can fix-and-rerun. Per-scenario command flows',
+              `are in [\`tests/e2e/SCENARIO-FLOWS.md\`](${blob('tests/e2e/SCENARIO-FLOWS.md')}); append the`,
+              `fix to [\`tests/e2e/ITERATION-LOG.md\`](${blob('tests/e2e/ITERATION-LOG.md')}) once resolved.`,
+              '',
+              '### Latest failing run',
+              detail,
+              '',
+              `**Artifacts:** download \`${artifactName}\` from the [run page](${runUrl}) for the full transcript + report.`,
+              '',
+              '### Next step',
+              '- [ ] Triage the failing assertion(s) above → fix the skill/script/scenario → re-dispatch this scenario.',
+              '- [ ] Record the finding + fix in `tests/e2e/ITERATION-LOG.md` (F-code).',
+            ].join('\n');
+
+            const existing = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'e2e-tester', per_page: 100 });
+            const found = existing.data.find(i => i.body && i.body.includes(marker));
+            if (found) {
+              await github.rest.issues.update({ owner, repo, issue_number: found.number, body });
+              core.notice(`Updated rolling tester-track issue #${found.number} (${slug})`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body, labels: ['e2e-tester'] });
+              core.notice(`Opened rolling tester-track issue #${created.data.number} (${slug})`);
+            }
+
       - name: Upload run artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-run-${{ github.run_id }}
+          # Per-leg name (matrix legs run in parallel; a shared artifact name would collide).
+          name: e2e-run-${{ github.run_id }}-${{ matrix.slug }}
+          # The full per-run transcript + verdict + harness-report live under
+          # artifacts/ci-<run_id>-<slug>/. Uploading them (not just the ITERATION-LOG) is what makes
+          # the auto-finding issue's "download the artifacts" pointer actionable for the maintainer.
           path: |
+            tests/e2e/artifacts/ci-${{ github.run_id }}-${{ matrix.slug }}/
             tests/e2e/ITERATION-LOG.md
           if-no-files-found: ignore

@@ -1,0 +1,77 @@
+# Troubleshoot smoke journey — scenario 05 (offline, NO Azure, NO mutation).
+#
+# The cheapest faithful smoke: /troubleshoot is pure diagnosis from the foundry-failure-modes
+# catalog. For a KNOWN symptom it resolves to a matrix entry WITHOUT any Azure call, deploy, or
+# resource. This exercises the failure-modes router + the symptom→fix mapping end to end, and is safe
+# to run anywhere (no creds, no baseline traffic). It is the matching scenario for the "no live
+# Foundry needed" smoke-test row in TESTING.md.
+#
+# Symptom chosen: a reserved env-var 400 (EnvVarReserved) → maps to F-01 in the catalog. Concrete,
+# unambiguous, and the fix (drop the FOUNDRY_*/AGENT_*/APPLICATIONINSIGHTS_* var — it's platform
+# injected) is verifiable in the prompt body.
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: troubleshoot
+title: Troubleshoot a known symptom (offline catalog diagnosis, no Azure)
+recipe: .opencode/commands/troubleshoot.md
+surfaces: [failure_modes_router, symptom_match, offline_no_azure]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+# No target block needed — this scenario makes no Azure call. (The harness tolerates an absent
+# target: the Azure probes are not used here.)
+
+prompt: |
+  You are the foundry-engineer. Diagnose a Foundry hosted-agent failure using the skillpack's
+  /troubleshoot flow, which routes to the foundry-failure-modes skill. This is an OFFLINE diagnosis:
+  do NOT call Azure, do NOT deploy anything, do NOT create or mutate any resource. The skillpack is
+  already installed into this workspace (skills under .agents/skills/, commands + the foundry-engineer
+  persona under .opencode/).
+
+  The symptom to diagnose:
+
+    "Deploying my hosted agent version fails immediately with HTTP 400 and the message
+     'EnvVarReserved'. I set ENABLE_INSTRUMENTATION and also APPLICATIONINSIGHTS_CONNECTION_STRING in
+     agent.yaml environment_variables."
+
+  Steps:
+
+  1. Open the foundry-failure-modes skill (.agents/skills/foundry-failure-modes/) and MATCH the
+     symptom to a catalog entry. A `400` + `EnvVarReserved` maps to failure F-01.
+  2. Write the diagnosis to a file diag/troubleshoot.md (create the diag/ directory) containing, at
+     minimum:
+       - the matched failure id (F-01),
+       - a one-sentence root cause,
+       - the exact fix (remove the reserved/platform-injected env var — APPLICATIONINSIGHTS_* is
+         injected by the platform; reserved prefixes FOUNDRY_*/AGENT_*/APPLICATIONINSIGHTS_* must NOT
+         be set by the author),
+       - a one-line verification step.
+  3. Print the same diagnosis summary to the user.
+
+  Rules: do NOT run az / azd / curl / any Azure MCP tool — this is a catalog lookup only. Never edit
+  files under .agents/skills/ or apm_modules/ (the installed skillpack). Do not create or mutate any
+  Azure resource. If you cannot find a matching entry, say so and STOP. End with the F-01 fix.
+
+budgets:
+  wall_clock: 600         # 10 min — a docs lookup + a small file write
+  no_progress: 240        # 4 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: diag/troubleshoot.md
+    desc: diagnosis written to a file
+  - kind: file_contains
+    path: diag/troubleshoot.md
+    contains: F-01
+    desc: symptom correctly matched to failure F-01 (reserved env var)
+  - kind: file_contains
+    path: diag/troubleshoot.md
+    contains: APPLICATIONINSIGHTS
+    desc: the fix names the reserved/platform-injected env var to remove
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; offline diagnosis only

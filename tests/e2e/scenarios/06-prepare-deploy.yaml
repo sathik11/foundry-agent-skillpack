@@ -1,0 +1,106 @@
+# Prepare-deploy smoke journey — scenario 06 (preflight only, NO azd up, NO mutation).
+#
+# /prepare-deploy's entire contract is "validate, audit, and hand off at azd-ready" — it NEVER runs
+# `az acr build` or POSTs to the Foundry control plane, and it only runs `azd up` if the user answers
+# `y` at the Step 6 checkpoint. This scenario drives the preflight to that checkpoint and STOPS,
+# proving the Track H-Container gates (H1-H5), Foundry resource validation, and the capability gate
+# fan-out all run green against a correctly-scaffolded agent — without deploying anything.
+#
+# Agent scaffolded clean (not the deliberately-flawed learn-agent fixture, which lives in the playbook
+# package and is not installed into the harness workspace). So preflight should reach azd-ready.
+#
+# Reads live Foundry (model-deployment GET, ACR list) but writes NOTHING — no azd up, no resource
+# create. Safe to run repeatedly against the standing baseline.
+#
+# Driver: foundry-engineer on gpt-5.3-codex (coding-optimized; gpt-5.4 reasoning stalled — F-C).
+
+id: prepare-deploy
+title: Prepare-deploy preflight to azd-ready (no azd up, no mutation)
+recipe: .opencode/commands/prepare-deploy.md
+surfaces: [track_h_container_preflight, model_deployment_validate, capability_gate_fanout, azd_ready_handoff]
+
+driver:
+  agent: foundry-engineer
+  model: foundry/gpt-5.3-codex
+
+target:
+  subscription: d194e976-63c4-43c9-995a-5340d0daffb1
+  resource_group: agentskillpack-testbed-rg
+  region: westus
+  foundry_account: ai-account-cnkboq4uixafy
+  foundry_project: ai-project-skillpack-e2e
+  project_endpoint: https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+  model_deployment: gpt-4o-mini
+
+prompt: |
+  You are the foundry-engineer. Run the skillpack's /prepare-deploy preflight on a greenfield hosted
+  agent and STOP at the azd-ready handoff — you must NOT run `azd up`, `az acr build`, or POST to the
+  Foundry control plane, and you must NOT create or mutate any Azure resource. The Foundry baseline is
+  ALREADY provisioned. The skillpack is already installed (scripts under .agents/skills/, commands +
+  the foundry-engineer persona under .opencode/). You are already logged in to Azure as a service
+  principal with the needed roles.
+
+  Confirmed target facts (do NOT rediscover, do NOT create/delete any infrastructure):
+
+    subscription      = d194e976-63c4-43c9-995a-5340d0daffb1
+    resource_group    = agentskillpack-testbed-rg
+    region            = westus
+    foundry_account   = ai-account-cnkboq4uixafy
+    foundry_project   = ai-project-skillpack-e2e
+    project_endpoint  = https://ai-account-cnkboq4uixafy.services.ai.azure.com/api/projects/ai-project-skillpack-e2e
+    model_deployment  = gpt-4o-mini   (already deployed — validate it exists; do NOT deploy a model)
+
+  Steps:
+
+  1. SCAFFOLD agents/smoke-prepare/ from the agent-framework template in
+     .agents/skills/foundry-deploy/templates/ (Dockerfile, agent.yaml, main.py, requirements.txt). Do
+     NOT edit the template sources. Keep the agent name `smoke-prepare`. The template is already
+     gate-clean (ENABLE_INSTRUMENTATION=true, pinned azure-identity, FoundryChatClient entrypoint), so
+     the Track H checklist should pass.
+  2. Write agents/smoke-prepare/agent-capabilities.yaml: schema_version 1, agent_kind hosted,
+     deploy_mode container, the target block from the facts above, model gpt-4o-mini, guardrails layer
+     middleware, toolbox disabled (no MCP servers), no knowledge sources, no purview, no fabric, no
+     workiq_teams, network class public.
+  3. Run /prepare-deploy for agent_path=agents/smoke-prepare. Capture the FULL run transcript to a log
+     file agents/smoke-prepare/preflight-out/prepare-deploy.log (mkdir -p the directory; tee or
+     redirect combined stdout+stderr). Walk the steps:
+       - Step 0: caller-role + azd tooling preflight,
+       - Step 1: detect kind = Hosted (container),
+       - Track H-Container: the H1-H5 checklist (expect all ✅ on this clean scaffold),
+       - Step 2 / 2.4: validate the gpt-4o-mini deployment EXISTS (read-only GET — do NOT deploy),
+       - Step 2.5: capability-gate fan-out (guardrails middleware gate),
+       - Step 3: prepare for azd up (azd env sync + azure.yaml validation — this is still preflight,
+         it does NOT deploy),
+       - Step 6: print the "azd-ready" summary and the `Run azd up now? [y/N]` checkpoint.
+  4. At the Step 6 checkpoint, ANSWER NO. Do NOT run `azd up`. The log must show the azd-ready summary
+     and that you stopped before deploying.
+
+  Rules: NEVER run `azd up`, `az acr build`, or any resource-creating command. Read-only Azure calls
+  (model-deployment GET, ACR list, role list) are allowed; resource CREATE/UPDATE/DELETE is NOT. Never
+  edit files under .agents/skills/ or apm_modules/ (the installed skillpack). If a gate fails, capture
+  the error and STOP — do not retry the same failing command more than twice or loop. End with the
+  azd-ready summary and confirmation that you did NOT deploy.
+
+budgets:
+  wall_clock: 1200        # 20 min — scaffold + read-only validation, no deploy
+  no_progress: 480        # 8 min
+  loop_threshold: 4
+
+assertions:
+  - kind: path_exists
+    path: agents/smoke-prepare/agent-capabilities.yaml
+    desc: capabilities manifest scaffolded (also anchors agent-status.json lookup)
+  - kind: path_exists
+    path: agents/smoke-prepare/preflight-out/prepare-deploy.log
+    desc: prepare-deploy transcript captured
+  - kind: file_contains
+    path: agents/smoke-prepare/preflight-out/prepare-deploy.log
+    contains: azd-ready
+    desc: preflight reached the azd-ready handoff
+  - kind: agent_status
+    field: preflight.capabilities.guardrails.verdict
+    equals: pass
+    desc: the guardrails capability gate passed and was stamped into agent-status.json
+
+cleanup:
+  teardown_agents: false   # nothing was deployed; preflight only
