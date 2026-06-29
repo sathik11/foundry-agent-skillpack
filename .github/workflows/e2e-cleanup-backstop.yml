@@ -1,0 +1,61 @@
+name: E2E cleanup backstop (cancel-safe sweep)
+
+# Safety net for the live tester track (e2e-test.yml). That job tears down ephemeral agent
+# resources with an `if: always()` step on pass/fail/cancel — but when a run is CANCELLED mid-deploy,
+# GitHub gives `always()` steps only a short grace window before force-killing the runner, so a
+# `azd up` interrupted partway can leave tagged-but-not-yet-swept resources behind. This standalone
+# job is the independent backstop: it runs cleanup-sweep.sh on a schedule (and on demand) so any
+# orphaned ephemeral resource older than MAX_AGE_HOURS is deleted even if no run cleaned up after
+# itself. The standing baseline is never touched (sweep only deletes e2e-ephemeral / azd-service-name).
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Actually delete (off = dry-run preview only).
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 */6 * * *'   # every 6h — bounds orphan lifetime well under MAX_AGE_HOURS
+
+permissions:
+  contents: read
+  id-token: write   # OIDC azure/login
+
+concurrency:
+  group: e2e-cleanup-backstop
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: e2e-testbed   # same protected env / secrets as the tester track
+    env:
+      AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ secrets.E2E_RESOURCE_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (service principal secret)
+        if: ${{ env.AZURE_CREDENTIALS != '' }}
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Azure login (OIDC fallback — no stored secret)
+        if: ${{ env.AZURE_CREDENTIALS == '' && env.AZURE_CLIENT_ID != '' }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # Scheduled runs always --apply (cron has no inputs). Manual runs honour the apply toggle so a
+      # maintainer can preview first. Standing baseline is never touched — sweep is tag-scoped.
+      - name: Sweep orphaned ephemeral resources
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.apply }}" = "true" ]; then
+            bash infra/cleanup-sweep.sh --apply
+          else
+            bash infra/cleanup-sweep.sh
+          fi

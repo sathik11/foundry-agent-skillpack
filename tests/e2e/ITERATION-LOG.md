@@ -258,3 +258,18 @@ operation succeeding because of the grant, and teardown of test-only assignments
 agent principal (the greenfield deploy).
 
 Total real skillpack defects found by these smokes: **F-F, F-G, F-H, F-I, F-M, F-N, F-O, F-P, F-Q, F-R** (10 fixed).
+
+## Run greenfield-live (2026-06-29) — cancelled mid-flight (CI hardening, no skillpack defect)
+
+Live greenfield legs were **cancelled** by the maintainer while in flight. Both deploy assertions
+read `agent-status.json not found` — not a deploy regression but a **diagnostic gap**: that file is
+the LAST artifact of the journey (step 6, written by `agent_status.py`), so when the run never
+reaches deploy (azd missing / preflight abort / cancel) one missing file masked both checks.
+
+| ID | Finding | Status |
+|---|---|---|
+| F-S | Missing `agent-status.json` reported a bare "not found" on both deploy + verify assertions, hiding the real cause (journey died before the deploy step). | **FIXED** — `harness.py` now reports "deploy never reached deploy step; cannot evaluate <field>" so a missing file is distinct from a deploy that ran and reported a bad value. |
+| F-T | **Cancel teardown gap:** the tester-track teardown is `if: always()`, but a CANCELLED run only gets a short grace window before the runner is force-killed, so a mid-`azd up` cancel could orphan ephemeral resources. | **FIXED** — added `e2e-cleanup-backstop.yml`: a scheduled (every 6h) + on-demand standalone sweep that runs `cleanup-sweep.sh` independently of any run, deleting orphaned `e2e-ephemeral`/`azd-service-name` resources older than `MAX_AGE_HOURS`. Baseline preserved. |
+
+**Cancel safety answer:** pass/fail still tears down in-job; cancel mid-deploy is now backstopped
+within ≤6h. Baseline (`purpose=skillpack-e2e-baseline`) is never swept.
