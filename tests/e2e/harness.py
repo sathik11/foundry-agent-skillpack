@@ -281,7 +281,12 @@ def check_assertions(scenario: dict, workdir: Path) -> list[dict]:
                 detail = f"{a['path']} contains {a['contains']!r}: {ok}"
         elif kind == "agent_status":
             if status is None:
-                detail = "agent-status.json not found"
+                # Content-aware: the driver never produced agent-status.json, so the deploy step was
+                # never reached (e.g. preflight aborted, azd not installed, or the journey stalled
+                # before deploy). Make that distinct from a deploy that ran but reported a bad value,
+                # so a single missing file doesn't mask the real deploy/verify error.
+                detail = (f"agent-status.json not found — deploy never reached deploy step; "
+                          f"cannot evaluate {a['field']}")
             else:
                 val = dotted(status, a["field"])
                 # Three comparison modes (pick exactly one): `equals` (default), `not_equals`, or
