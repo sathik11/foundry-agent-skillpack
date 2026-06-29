@@ -63,7 +63,7 @@ def main() -> int:
 
     # 1. Delete the continuous-eval rule (stops sampling new traffic).
     try:
-        client.evaluation_rules.delete(rule_name=rule_name)
+        client.evaluation_rules.delete(rule_name)
         log(f"deleted rule '{rule_name}'.")
     except AttributeError:
         log("evaluation_rules.delete not on this SDK build — skipping rule delete.")
